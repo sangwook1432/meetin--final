@@ -21,11 +21,28 @@ class Settings(BaseSettings):
     admin_emails: str = Field(default="", alias="ADMIN_EMAILS")
 
     # CORS: 콤마 구분 허용 origin 목록
-    # 예) ALLOWED_ORIGINS=https://meetin.kr,https://www.meetin.kr
     allowed_origins: str = Field(
         default="http://localhost:3000,http://127.0.0.1:3000",
         alias="ALLOWED_ORIGINS",
     )
+
+    # ─── Toss Payments ───────────────────────────────────────────
+    # 테스트 키: https://developers.tosspayments.com/
+    toss_secret_key: str = Field(default="", alias="TOSS_SECRET_KEY")
+    toss_client_key: str = Field(default="", alias="TOSS_CLIENT_KEY")
+
+    # ─── 카카오 알림톡 ────────────────────────────────────────────
+    kakao_api_key: str = Field(default="", alias="KAKAO_API_KEY")
+    kakao_sender_key: str = Field(default="", alias="KAKAO_SENDER_KEY")
+    # 템플릿 코드 (카카오 비즈메시지 채널에서 승인 후 발급)
+    kakao_template_waiting_confirm: str = Field(default="MEETIN_WAIT", alias="KAKAO_TPL_WAITING_CONFIRM")
+    kakao_template_confirmed: str = Field(default="MEETIN_CONF", alias="KAKAO_TPL_CONFIRMED")
+    kakao_template_refunded: str = Field(default="MEETIN_RFND", alias="KAKAO_TPL_REFUNDED")
+    kakao_template_forfeited: str = Field(default="MEETIN_FORF", alias="KAKAO_TPL_FORFEITED")
+    kakao_template_replacement: str = Field(default="MEETIN_REPL", alias="KAKAO_TPL_REPLACEMENT")
+
+    # ─── Sentry ──────────────────────────────────────────────────
+    sentry_dsn: str = Field(default="", alias="SENTRY_DSN")
 
     def admin_email_set(self) -> set[str]:
         raw = (self.admin_emails or "").strip()

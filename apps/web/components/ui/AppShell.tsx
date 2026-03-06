@@ -43,6 +43,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 인증 필요 →
               </Link>
             )}
+            {/* 관리자 전용 링크 */}
+            {user.is_admin && (
+              <Link
+                href="/admin"
+                className="rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-semibold text-purple-700 hover:bg-purple-200"
+              >
+                🛡️ 관리자
+              </Link>
+            )}
             <button
               onClick={logout}
               className="text-xs text-gray-400 hover:text-gray-600"

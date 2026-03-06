@@ -50,19 +50,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserPublic | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // 앱 마운트 시 토큰 있으면 /me로 세션 복구
+  // ── 앱 마운트 시 세션 복구 ───────────────────────────────────
+  // apiFetch 내부에서:
+  //   1. access_token 유효 → 즉시 반환
+  //   2. 401 수신 → refresh_token 으로 재발급 1회 시도
+  //   3. refresh 실패 → clearTokens() 후 throw "Session expired"
+  // 따라서 catch 에서는 setUser(null) 만 해도 충분.
+  // (clearTokens 는 api.ts 내부에서 이미 호출됨)
   useEffect(() => {
-    if (!getToken()) {
+    const token = getToken();
+    if (!token) {
       setLoading(false);
       return;
     }
     getMe()
       .then(setUser)
-      .catch(() => {
-        // 토큰 만료됐지만 refresh도 실패한 경우 → api.ts에서 이미 clearTokens 처리
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : "";
+        // "Session expired" = refresh 실패 → 이미 clearTokens 완료
+        // 그 외 네트워크 에러 등은 로그만 남기고 null 처리
+        if (msg !== "Session expired") {
+          console.warn("[AuthContext] getMe 실패:", msg);
+        }
         setUser(null);
       })
       .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
@@ -79,9 +92,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [router]);
 
   const refreshUser = useCallback(async () => {
-    const me = await getMe();
-    setUser(me);
-  }, []);
+    try {
+      const me = await getMe();
+      setUser(me);
+    } catch {
+      // refresh 실패 시 로그아웃
+      clearTokens();
+      setUser(null);
+      router.push("/login");
+    }
+  }, [router]);
 
   return (
     <AuthContext.Provider value={{ user, loading, login, logout, refreshUser }}>

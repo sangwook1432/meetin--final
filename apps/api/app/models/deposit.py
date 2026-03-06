@@ -7,12 +7,13 @@ from app.db.base import Base
 
 
 class DepositStatus(str, enum.Enum):
-    REQUIRED = "REQUIRED"   # 확정 전(결제 필요)
-    PENDING = "PENDING"     # 결제 시작(prepare 이후)
-    HELD = "HELD"           # 토스 승인 완료(예치)
-    REFUNDED = "REFUNDED"   # 환급 완료
-    FORFEITED = "FORFEITED" # 몰수
-    CANCELED = "CANCELED"   # 취소/실패/만료
+    REQUIRED = "REQUIRED"           # 확정 전(결제 필요)
+    PENDING = "PENDING"             # 결제 시작(prepare 이후)
+    HELD = "HELD"                   # 토스 승인 완료(예치)
+    REFUND_PENDING = "REFUND_PENDING"  # 환불 처리 중 (leave 트리거)
+    REFUNDED = "REFUNDED"           # 환급 완료
+    FORFEITED = "FORFEITED"         # 몰수(노쇼)
+    CANCELED = "CANCELED"           # 취소/실패/만료
 
 
 class Deposit(Base):

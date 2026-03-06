@@ -9,7 +9,7 @@ from app.core.deps import get_db, require_verified
 from app.models.meeting import Meeting, MeetingType, MeetingStatus, Team
 from app.models.meeting_slot import MeetingSlot
 from app.models.user import User
-from app.models.confirmation import Confirmation
+from app.models.deposit import Deposit, DepositStatus
 from app.models.chat_room import ChatRoom
 
 router = APIRouter()
@@ -203,13 +203,35 @@ def leave_meeting(
         leaving_user_id = user.id
         leaving_was_host = (meeting.host_user_id == leaving_user_id)
 
-        # 슬롯 비우기
-        my_slot.user_id = None
-
-        # WAITING_CONFIRM이면 확정 리셋(단순화)
+        # ── WAITING_CONFIRM 에서 나가는 경우 ─────────────────
+        # 이미 결제(HELD)한 보증금이 있으면 REFUND_PENDING 으로 표시
+        # (실제 Toss 환불은 비동기로 처리하거나 관리자 배치에서 실행)
         if meeting.status == MeetingStatus.WAITING_CONFIRM:
-            db.execute(delete(Confirmation).where(Confirmation.meeting_id == meeting_id))
-            # NOTE: deposits 환불/취소는 추후
+            held_deposit = db.execute(
+                select(Deposit).where(
+                    Deposit.meeting_id == meeting_id,
+                    Deposit.user_id == leaving_user_id,
+                    Deposit.status == DepositStatus.HELD,
+                ).with_for_update()
+            ).scalar_one_or_none()
+
+            if held_deposit:
+                # REFUND_PENDING: 운영 배치 or /deposits/{id}/refund API 에서 처리
+                held_deposit.status = DepositStatus.REFUND_PENDING
+
+            # 나간 유저의 confirmed 리셋은 슬롯 user_id=None 으로 자동 처리됨
+            # (slot.confirmed 은 user_id 있는 슬롯만 의미 있음)
+
+        # 슬롯 비우기 + confirmed 리셋
+        my_slot.user_id = None
+        my_slot.confirmed = False
+
+        # WAITING_CONFIRM 이었다면 남은 멤버들의 confirmed 도 리셋
+        # (한 명이 빠지면 전체 다시 확정 필요)
+        if meeting.status == MeetingStatus.WAITING_CONFIRM:
+            for s in slots:
+                if s.user_id is not None:
+                    s.confirmed = False
 
         remaining_user_ids = [s.user_id for s in slots if s.user_id is not None]
 
@@ -236,7 +258,7 @@ def leave_meeting(
         raise
 
 # -------------------------
-# Confirm
+# Confirm (무결제 경로 — 개발/테스트 or 결제 없는 미팅용)
 # -------------------------
 @router.post("/meetings/{meeting_id}/confirm")
 def confirm_meeting(
@@ -244,6 +266,16 @@ def confirm_meeting(
     db: Session = Depends(get_db),
     user=Depends(require_verified),
 ):
+    """
+    참가 확정 (slot.confirmed = True).
+
+    설계 원칙:
+      - slot.confirmed 이 유일한 확정 소스.
+      - Confirmation 테이블은 사용하지 않음.
+      - 결제 플로우(payments.py confirm_payment)도 동일하게 slot.confirmed 을 씀.
+      - 이 엔드포인트는 결제 없이 바로 confirm 가능한 경로
+        (테스트 / 결제 없는 MVP 운영 시 사용).
+    """
     meeting = db.get(Meeting, meeting_id)
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
@@ -263,11 +295,15 @@ def confirm_meeting(
         raise HTTPException(status_code=403, detail="Not a meeting member")
 
     if slot.confirmed:
+        chat_room = db.execute(
+            select(ChatRoom).where(ChatRoom.meeting_id == meeting_id)
+        ).scalar_one_or_none()
         return {
             "meeting_id": meeting.id,
             "status": meeting.status.value,
             "confirmed": True,
             "already_confirmed": True,
+            "chat_room_id": chat_room.id if chat_room else None,
         }
 
     slot.confirmed = True
@@ -278,24 +314,11 @@ def confirm_meeting(
     ).scalars().all()
 
     member_slots = [s for s in slots if s.user_id is not None]
-
-    all_confirmed = all(s.confirmed for s in member_slots)
+    all_confirmed = member_slots and all(s.confirmed for s in member_slots)
 
     if all_confirmed:
         meeting.status = MeetingStatus.CONFIRMED
 
-        # ─────────────────────────────────────────────────
-        # ChatRoom 자동 생성
-        #
-        # 설계 원칙:
-        #  - UniqueConstraint("meeting_id") 가 걸려 있으므로
-        #    중복 생성 시도는 DB 레벨에서 막힘
-        #  - 하지만 동시 confirm 요청(race condition)을 방어하기 위해
-        #    먼저 SELECT 로 존재 여부를 확인한 뒤 없을 때만 INSERT
-        #  - 이 함수는 이미 meeting row-lock 없이 동작하므로
-        #    실제 운영에선 on_conflict_do_nothing 이 더 안전하지만,
-        #    MVP 단계에서는 SELECT → INSERT 패턴으로 충분함
-        # ─────────────────────────────────────────────────
         existing_room = db.execute(
             select(ChatRoom).where(ChatRoom.meeting_id == meeting_id)
         ).scalar_one_or_none()
@@ -305,7 +328,6 @@ def confirm_meeting(
 
     db.commit()
 
-    # commit 후 chat_room_id 조회 (CONFIRMED 전환 여부와 관계없이 반환)
     chat_room = db.execute(
         select(ChatRoom).where(ChatRoom.meeting_id == meeting_id)
     ).scalar_one_or_none()
