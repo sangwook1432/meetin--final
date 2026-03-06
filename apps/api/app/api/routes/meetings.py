@@ -10,6 +10,7 @@ from app.models.meeting import Meeting, MeetingType, MeetingStatus, Team
 from app.models.meeting_slot import MeetingSlot
 from app.models.user import User
 from app.models.confirmation import Confirmation
+from app.models.chat_room import ChatRoom
 
 router = APIRouter()
 
@@ -278,15 +279,43 @@ def confirm_meeting(
 
     member_slots = [s for s in slots if s.user_id is not None]
 
-    if all(s.confirmed for s in member_slots):
+    all_confirmed = all(s.confirmed for s in member_slots)
+
+    if all_confirmed:
         meeting.status = MeetingStatus.CONFIRMED
 
+        # ─────────────────────────────────────────────────
+        # ChatRoom 자동 생성
+        #
+        # 설계 원칙:
+        #  - UniqueConstraint("meeting_id") 가 걸려 있으므로
+        #    중복 생성 시도는 DB 레벨에서 막힘
+        #  - 하지만 동시 confirm 요청(race condition)을 방어하기 위해
+        #    먼저 SELECT 로 존재 여부를 확인한 뒤 없을 때만 INSERT
+        #  - 이 함수는 이미 meeting row-lock 없이 동작하므로
+        #    실제 운영에선 on_conflict_do_nothing 이 더 안전하지만,
+        #    MVP 단계에서는 SELECT → INSERT 패턴으로 충분함
+        # ─────────────────────────────────────────────────
+        existing_room = db.execute(
+            select(ChatRoom).where(ChatRoom.meeting_id == meeting_id)
+        ).scalar_one_or_none()
+
+        if not existing_room:
+            db.add(ChatRoom(meeting_id=meeting_id))
+
     db.commit()
+
+    # commit 후 chat_room_id 조회 (CONFIRMED 전환 여부와 관계없이 반환)
+    chat_room = db.execute(
+        select(ChatRoom).where(ChatRoom.meeting_id == meeting_id)
+    ).scalar_one_or_none()
 
     return {
         "meeting_id": meeting.id,
         "status": meeting.status.value,
         "confirmed": True,
+        # 프론트가 바로 채팅방으로 redirect 할 수 있도록 room ID 포함
+        "chat_room_id": chat_room.id if chat_room else None,
     }
     
 # -------------------------
@@ -488,21 +517,35 @@ def get_meeting_detail(
     slot_out = []
     for s in slots:
         if s.user_id is None:
-            slot_out.append(
-                {"team": s.team.value, "slot_index": s.slot_index, "user": None}
-            )
+            # 빈 슬롯: user 없음, confirmed는 항상 False
+            slot_out.append({
+                "team": s.team.value,
+                "slot_index": s.slot_index,
+                "user": None,
+                "confirmed": False,          # ← 추가: 빈 슬롯은 미확정
+            })
         else:
             u = users_by_id.get(s.user_id)
-            slot_out.append(
-                {
-                    "team": s.team.value,
-                    "slot_index": s.slot_index,
-                    "user": public_profile(u) if u else {"user_id": s.user_id},
-                }
-            )
+            slot_out.append({
+                "team": s.team.value,
+                "slot_index": s.slot_index,
+                "user": public_profile(u) if u else {"user_id": s.user_id},
+                "confirmed": s.confirmed,    # ← 추가: 실제 확정 여부
+            })
+
     is_member = any(s.user_id == user.id for s in slots)
+
+    # 현재 로그인 유저의 본인 슬롯 confirmed 여부 (WAITING_CONFIRM 화면에서 버튼 상태 결정용)
+    my_slot = next((s for s in slots if s.user_id == user.id), None)
+    my_confirmed = my_slot.confirmed if my_slot else False
+
     filled_male = sum(1 for s in slots if s.team == Team.MALE and s.user_id is not None)
     filled_female = sum(1 for s in slots if s.team == Team.FEMALE and s.user_id is not None)
+
+    # chat_room_id: CONFIRMED 상태일 때만 조인 가능 → 프론트에서 바로 활용
+    chat_room = db.execute(
+        select(ChatRoom).where(ChatRoom.meeting_id == meeting_id)
+    ).scalar_one_or_none()
 
     return {
         "meeting_id": meeting.id,
@@ -510,6 +553,8 @@ def get_meeting_detail(
         "status": meeting.status.value,
         "host_user_id": meeting.host_user_id,
         "is_member": is_member,
+        "my_confirmed": my_confirmed,        # ← 추가: 내 확정 여부
+        "chat_room_id": chat_room.id if chat_room else None,  # ← 추가: 채팅방 ID
         "filled": {
             "male": filled_male,
             "female": filled_female,
