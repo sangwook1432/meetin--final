@@ -9,10 +9,12 @@
 import type {
   MeetingDetail,
   MeetingListItem,
+  MyMeetingItem,
   ChatMessage,
   ConfirmResponse,
   MeetingType,
   UserPublic,
+  WalletTransaction,
 } from "@/types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -302,4 +304,71 @@ export async function getMyDeposits(meetingId?: number): Promise<{
 }> {
   const qs = meetingId !== undefined ? `?meeting_id=${meetingId}` : "";
   return apiFetch(`/payments/deposits/me${qs}`);
+}
+
+// ─────────────────────────────────────────
+// My Meetings (내가 참여한 미팅)
+// ─────────────────────────────────────────
+
+/** GET /meetings/my — 내가 참여 중인 미팅 목록 */
+export async function getMyMeetings(): Promise<{ meetings: MyMeetingItem[] }> {
+  return apiFetch("/meetings/my");
+}
+
+// ─────────────────────────────────────────
+// Wallet (잔액 충전 / 반환)
+// ─────────────────────────────────────────
+
+/** GET /wallet/balance — 현재 잔액 조회 */
+export async function getWalletBalance(): Promise<{ balance: number }> {
+  return apiFetch("/wallet/balance");
+}
+
+/** POST /wallet/charge/prepare — 충전 주문 생성 */
+export async function prepareCharge(amount: number): Promise<{
+  orderId: string;
+  amount: number;
+  orderName: string;
+}> {
+  return apiFetch(`/wallet/charge/prepare?amount=${amount}`, { method: "POST" });
+}
+
+/** POST /wallet/charge/confirm — Toss 결제 성공 후 잔액 충전 확정 */
+export async function confirmCharge(params: {
+  order_id: string;
+  payment_key?: string;
+}): Promise<{
+  status: "charged" | "already_charged";
+  amount?: number;
+  balance: number;
+}> {
+  const qs = new URLSearchParams({ order_id: params.order_id });
+  if (params.payment_key) qs.set("payment_key", params.payment_key);
+  return apiFetch(`/wallet/charge/confirm?${qs}`, { method: "POST" });
+}
+
+/** POST /wallet/withdraw — 잔액 반환 신청 */
+export async function requestWithdraw(payload: {
+  amount: number;
+  bank_name: string;
+  account_number: string;
+  account_holder: string;
+}): Promise<{
+  status: string;
+  amount: number;
+  balance: number;
+  message: string;
+}> {
+  return apiFetch("/wallet/withdraw", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** GET /wallet/transactions — 잔액 변동 내역 */
+export async function getWalletTransactions(limit = 50): Promise<{
+  balance: number;
+  transactions: WalletTransaction[];
+}> {
+  return apiFetch(`/wallet/transactions?limit=${limit}`);
 }

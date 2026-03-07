@@ -65,3 +65,6 @@ class User(Base):
 
     photo_url_1: Mapped[str | None] = mapped_column(Text, nullable=True)
     photo_url_2: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # 지갑 잔액 (원 단위, 토스 충전/차감)
+    balance: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

@@ -32,6 +32,7 @@ export interface UserPublic {
   lookalike_value: string | null;
   photo_url_1: string | null;
   photo_url_2: string | null;
+  balance: number;
 }
 
 // ─────────────────────────────────────────────
@@ -127,4 +128,47 @@ export interface ConfirmResponse {
   confirmed: boolean;
   already_confirmed?: boolean;
   chat_room_id: number | null;
+}
+
+// ─────────────────────────────────────────────
+// 내가 참여한 미팅 아이템 (GET /meetings/my)
+// ─────────────────────────────────────────────
+
+export interface MyMeetingItem {
+  meeting_id: number;
+  meeting_type: MeetingType;
+  status: MeetingStatus;
+  host_user_id: number;
+  is_host: boolean;
+  my_confirmed: boolean;
+  preferred_universities_raw: string | null;
+  preferred_universities_any: boolean;
+  filled: {
+    male: number;
+    female: number;
+    total: number;
+    capacity: number;
+  };
+}
+
+// ─────────────────────────────────────────────
+// 지갑 트랜잭션
+// ─────────────────────────────────────────────
+
+export type TxType =
+  | "CHARGE"
+  | "DEPOSIT_HOLD"
+  | "DEPOSIT_REFUND"
+  | "WITHDRAW"
+  | "WITHDRAW_DONE"
+  | "ADMIN_ADJUST";
+
+export interface WalletTransaction {
+  id: number;
+  tx_type: TxType;
+  amount: number;
+  balance_after: number;
+  meeting_id: number | null;
+  note: string | null;
+  created_at: string;
 }

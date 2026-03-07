@@ -3,8 +3,13 @@
 /**
  * AppShell — 바텀 탭 네비게이션이 있는 공통 레이아웃
  *
- * 인증이 필요한 모든 페이지(discover, vacancies, /me/*)에서 사용.
- * /login, /register 같은 공개 페이지는 이 컴포넌트를 쓰지 않음.
+ * 탭 구성 (4개):
+ *   1. 둘러보기   /discover
+ *   2. 빈자리     /vacancies
+ *   3. 참여한 미팅 /my-meetings
+ *   4. 설정       /settings
+ *
+ * /login, /register 같은 공개 페이지는 이 컴포넌트를 사용하지 않음.
  */
 
 import Link from "next/link";
@@ -12,14 +17,15 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 
 const TABS = [
-  { href: "/discover",  label: "둘러보기", icon: "🔍" },
-  { href: "/vacancies", label: "빈자리",   icon: "👥" },
-  { href: "/me/profile", label: "내 프로필", icon: "👤" },
+  { href: "/discover",     label: "둘러보기",    icon: "🔍" },
+  { href: "/vacancies",    label: "빈자리",      icon: "👥" },
+  { href: "/my-meetings",  label: "참여한 미팅",  icon: "📋" },
+  { href: "/settings",     label: "설정",        icon: "⚙️" },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
@@ -29,7 +35,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           MEETIN<span className="text-blue-600">.</span>
         </Link>
         {user && (
-          <div className="flex items-center gap-3 text-sm text-gray-500">
+          <div className="flex items-center gap-2 text-sm text-gray-500">
             {/* 인증 상태 뱃지 */}
             {user.verification_status === "VERIFIED" ? (
               <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
@@ -43,6 +49,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 인증 필요 →
               </Link>
             )}
+
+            {/* 잔액 표시 */}
+            <Link
+              href="/settings/wallet/charge"
+              className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+            >
+              💰 {(user.balance ?? 0).toLocaleString()}원
+            </Link>
+
             {/* 관리자 전용 링크 */}
             {user.is_admin && (
               <Link
@@ -52,12 +67,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 🛡️ 관리자
               </Link>
             )}
-            <button
-              onClick={logout}
-              className="text-xs text-gray-400 hover:text-gray-600"
-            >
-              로그아웃
-            </button>
           </div>
         )}
       </header>
@@ -65,10 +74,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* 페이지 콘텐츠 */}
       <main className="flex-1 pb-20">{children}</main>
 
-      {/* 바텀 탭 */}
+      {/* 바텀 탭 (4개) */}
       <nav className="fixed bottom-0 left-0 right-0 z-20 flex border-t border-gray-100 bg-white">
         {TABS.map((tab) => {
-          const active = pathname === tab.href || pathname.startsWith(tab.href + "/");
+          const active =
+            pathname === tab.href ||
+            pathname.startsWith(tab.href + "/");
           return (
             <Link
               key={tab.href}

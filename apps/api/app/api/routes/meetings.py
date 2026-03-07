@@ -363,6 +363,75 @@ def confirm_meeting(
 # -------------------------
 # Discover
 # -------------------------
+# -------------------------
+# My Meetings (내가 참여한 미팅)
+# -------------------------
+@router.get("/meetings/my")
+def my_meetings(
+    db: Session = Depends(get_db),
+    user=Depends(require_verified),
+):
+    """
+    내가 참여 중인 미팅 목록 (슬롯에 user_id가 나인 모든 미팅).
+
+    - 상태 무관하게 전부 반환 (RECRUITING ~ CONFIRMED)
+    - 탈퇴(CANCELLED/deleted)된 미팅은 슬롯 자체가 없으므로 자연 제외
+    - 각 미팅에 대해 상세 정보 + 내 확정 여부 포함
+    """
+    # 내가 속한 슬롯 조회
+    my_slots = db.execute(
+        select(MeetingSlot).where(MeetingSlot.user_id == user.id)
+    ).scalars().all()
+
+    if not my_slots:
+        return {"meetings": []}
+
+    meeting_ids = list({s.meeting_id for s in my_slots})
+
+    # 미팅 조회
+    meetings = db.execute(
+        select(Meeting).where(Meeting.id.in_(meeting_ids)).order_by(Meeting.id.desc())
+    ).scalars().all()
+
+    # 모든 슬롯 한 번에 조회 (N+1 방지)
+    all_slots = db.execute(
+        select(MeetingSlot).where(MeetingSlot.meeting_id.in_(meeting_ids))
+    ).scalars().all()
+    slots_by_mid: dict[int, list[MeetingSlot]] = defaultdict(list)
+    for s in all_slots:
+        slots_by_mid[s.meeting_id].append(s)
+
+    # 내 슬롯 인덱스 (meeting_id → slot)
+    my_slot_by_mid = {s.meeting_id: s for s in my_slots}
+
+    results = []
+    for m in meetings:
+        slots = slots_by_mid.get(m.id, [])
+        my_slot = my_slot_by_mid.get(m.id)
+
+        filled_male   = sum(1 for s in slots if s.team == Team.MALE   and s.user_id is not None)
+        filled_female = sum(1 for s in slots if s.team == Team.FEMALE and s.user_id is not None)
+
+        results.append({
+            "meeting_id":   m.id,
+            "meeting_type": m.meeting_type.value,
+            "status":       m.status.value,
+            "host_user_id": m.host_user_id,
+            "is_host":      m.host_user_id == user.id,
+            "my_confirmed": my_slot.confirmed if my_slot else False,
+            "preferred_universities_raw": m.preferred_universities_raw,
+            "preferred_universities_any": m.preferred_universities_any,
+            "filled": {
+                "male":     filled_male,
+                "female":   filled_female,
+                "total":    filled_male + filled_female,
+                "capacity": len(slots),
+            },
+        })
+
+    return {"meetings": results}
+
+
 @router.get("/meetings/discover")
 def discover_meetings(
     limit: int = Query(50, ge=1, le=200),
