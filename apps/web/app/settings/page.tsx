@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { AppShell } from "@/components/ui/AppShell";
+import { useEffect } from "react";
 
 interface MenuItemProps {
   icon: string;
@@ -63,20 +64,24 @@ export default function SettingsPage() {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-gray-400">
-        로딩 중...
-      </div>
-    );
-  }
+  useEffect(() => {
+      if (!loading && !user) {
+        router.replace("/login");
+      }
+    }, [user, loading, router]);
 
-  if (!user) {
-    router.replace("/login");
-    return null;
-  }
+    if (loading) {
+      return (
+        <div className="flex min-h-screen items-center justify-center text-sm text-gray-400">
+          로딩 중...
+        </div>
+      );
+    }
 
-  const balanceLabel = `${(user.balance ?? 0).toLocaleString()}원`;
+    // 유저가 없으면 일단 아무것도 그리지 않고 위 useEffect가 실행되길 기다림
+    if (!user) return null; 
+
+    const balanceLabel = `${(user.balance ?? 0).toLocaleString()}원`;
 
   return (
     <AppShell>

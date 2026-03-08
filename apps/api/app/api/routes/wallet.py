@@ -24,14 +24,12 @@
 ─────────────────────────────────────────────────────────────────
 """
 
-from __future__ import annotations
-
 import uuid
 import base64
-from typing import Optional
+from typing import Optional, Annotated
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Body
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -268,7 +266,7 @@ def confirm_charge(
 @_rate_limit("5/minute")
 def withdraw(
     request: Request,
-    payload: WithdrawRequest,
+    payload: Annotated[WithdrawRequest, Body(...)],
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -356,3 +354,5 @@ def get_transactions(
             for t in txs
         ],
     }
+
+WithdrawRequest.model_rebuild()

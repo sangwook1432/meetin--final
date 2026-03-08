@@ -50,42 +50,53 @@ export default function ChatRoomPage() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 1. 잠금 장치와 참조 변수들
+  const isFetchingRef = useRef(false); 
   const lastIdRef = useRef(0);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // ─── 메시지 fetch ──────────────────────────────────────
-
+  // 2. 메시지 가져오기 (중복 체크 및 잠금 로직 포함)
   const fetchMessages = useCallback(async () => {
+    if (isFetchingRef.current) return; // 이미 가져오는 중이면 무시
+    isFetchingRef.current = true;
+
     try {
       const res = await getMessages(roomId, lastIdRef.current);
-      if (res.messages.length > 0) {
-        setMessages((prev) => [...prev, ...res.messages]);
-        lastIdRef.current = res.messages[res.messages.length - 1].id;
+      if (res.messages && res.messages.length > 0) {
+        setMessages((prev) => {
+          // 기존에 이미 있는 ID는 제외하고 새로운 메시지만 추가
+          const existingIds = new Set(prev.map((m) => m.id));
+          const newUniqueMessages = res.messages.filter((m) => !existingIds.has(m.id));
+          
+          if (newUniqueMessages.length === 0) return prev;
+          return [...prev, ...newUniqueMessages];
+        });
+
+        // 마지막 메시지 ID 업데이트 (다음 요청 시 since_id로 사용)
+        const lastMsg = res.messages[res.messages.length - 1];
+        lastIdRef.current = lastMsg.id;
         setError(null);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "메시지를 가져올 수 없습니다");
+    } finally {
+      isFetchingRef.current = false; // 요청 완료 후 잠금 해제
     }
   }, [roomId]);
 
-  // 초기 로드
+  // 3. 폴링 설정 (진입 시 즉시 실행 + 2초마다)
   useEffect(() => {
-    fetchMessages();
+    fetchMessages(); // 초기 로드
+    const interval = setInterval(fetchMessages, 2000);
+    return () => clearInterval(interval);
   }, [fetchMessages]);
 
-  // 폴링: 2초마다
+  // 4. 새 메시지 수신 시 자동 스크롤
   useEffect(() => {
-    pollingRef.current = setInterval(fetchMessages, 2000);
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
-    };
-  }, [fetchMessages]);
-
-  // 새 메시지 수신 시 자동 스크롤
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messages.length > 0) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages]);
 
   // ─── 메시지 전송 ───────────────────────────────────────
