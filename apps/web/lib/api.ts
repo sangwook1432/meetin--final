@@ -504,3 +504,18 @@ export async function payDepositWithBalance(meetingId: number): Promise<{
 }> {
   return apiFetch(`/payments/deposits/pay-with-balance?meeting_id=${meetingId}`, { method: "POST" });
 }
+
+// ─────────────────────────────────────────────────────────
+// 미팅 친구 초대
+// ─────────────────────────────────────────────────────────
+
+/** POST /meetings/{meetingId}/invite-friend — 친구를 미팅에 초대 */
+export async function inviteFriendToMeeting(
+  meetingId: number,
+  friendUserId: number
+): Promise<{ status: string; friend_id: number; meeting_id: number }> {
+  return apiFetch(`/meetings/${meetingId}/invite-friend`, {
+    method: "POST",
+    body: JSON.stringify({ friend_user_id: friendUserId }),
+  });
+}

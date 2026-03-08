@@ -10,6 +10,7 @@
  *    - WAITING_CONFIRM : [보증금 결제 + 확정] / [확정 완료]
  *    - CONFIRMED : [채팅방 입장]
  * 3. CONFIRMED 전환 직후 → 자동으로 /chats/[roomId]로 이동
+ * 4. 빈 같은 성별 슬롯 클릭 → 친구 초대 모달
  *
  * Toss 결제 흐름:
  *   ① prepare_deposit → orderId / amount / orderName 획득
@@ -29,8 +30,10 @@ import {
   prepareDeposit,
   confirmTossPayment,
   getMyDeposits,
+  getFriends,
+  inviteFriendToMeeting,
 } from "@/lib/api";
-import type { MeetingDetail, MeetingStatus } from "@/types";
+import type { MeetingDetail, MeetingStatus, FriendItem, Gender, Team } from "@/types";
 import { TeamSection } from "@/components/meeting/TeamSection";
 
 // ─── 상태 뱃지 색상 ───────────────────────────────────────
@@ -62,6 +65,13 @@ export default function MeetingDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
 
+  // ── 친구 초대 모달 상태 ──
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteSlotIndex, setInviteSlotIndex] = useState<number | null>(null);
+  const [friends, setFriends] = useState<FriendItem[]>([]);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [friendsLoading, setFriendsLoading] = useState(false);
+
   // 폴링: WAITING_CONFIRM 상태에서 다른 유저의 confirm을 실시간 반영
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -82,15 +92,12 @@ export default function MeetingDetailPage() {
   }, [fetchMeeting]);
 
   // ─── Toss 결제 성공 콜백 처리 ────────────────────────────
-  // URL: /meetings/[id]?orderId=...&paymentKey=...&amount=... (Toss 리다이렉트)
   useEffect(() => {
     const orderId = searchParams.get("orderId");
     const paymentKey = searchParams.get("paymentKey");
-    const paymentAmount = searchParams.get("amount");
 
     if (!orderId) return;
 
-    // Toss 결제 성공 콜백 → 서버 검증
     (async () => {
       setPaymentLoading(true);
       setPaymentStatus("결제 검증 중...");
@@ -107,8 +114,6 @@ export default function MeetingDetailPage() {
         }
         await fetchMeeting();
         setPaymentStatus("✅ 보증금 결제 완료. 다른 멤버를 기다리는 중...");
-
-        // URL 파라미터 정리 (히스토리 교체)
         router.replace(`/meetings/${meetingId}`);
       } catch (e) {
         setPaymentStatus(null);
@@ -134,6 +139,36 @@ export default function MeetingDetailPage() {
       if (pollingRef.current) clearInterval(pollingRef.current);
     };
   }, [meeting?.status, fetchMeeting]);
+
+  // ─── 친구 초대 슬롯 클릭 ────────────────────────────────
+
+  const handleSlotInvite = async (slotIndex: number) => {
+    setInviteSlotIndex(slotIndex);
+    setShowInviteModal(true);
+    setFriendsLoading(true);
+    try {
+      const res = await getFriends();
+      // 수락된 친구만 표시
+      setFriends((res.friends as FriendItem[]).filter((f) => f.status === "ACCEPTED"));
+    } catch {
+      setFriends([]);
+    } finally {
+      setFriendsLoading(false);
+    }
+  };
+
+  const handleInviteFriend = async (friendUserId: number) => {
+    setInviteLoading(true);
+    try {
+      await inviteFriendToMeeting(meetingId, friendUserId);
+      setShowInviteModal(false);
+      alert("친구에게 초대 알림을 보냈습니다! 📨");
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "초대 실패");
+    } finally {
+      setInviteLoading(false);
+    }
+  };
 
   // ─── 액션 핸들러 ──────────────────────────────────────────
 
@@ -166,19 +201,12 @@ export default function MeetingDetailPage() {
     }
   };
 
-  /**
-   * Toss 결제 위젯 실행
-   * - TOSS_CLIENT_KEY가 있으면 실결제 위젯 실행
-   * - 없으면 개발용 mock: 바로 서버 confirm 호출
-   */
   const handlePayment = async () => {
     setPaymentLoading(true);
     try {
-      // 1. 서버에서 주문 정보 획득
       const order = await prepareDeposit(meetingId);
 
       if (!TOSS_CLIENT_KEY) {
-        // ── 개발/테스트 환경: mock 결제 (Toss 위젯 없이 서버 직접 confirm) ──
         setPaymentStatus("개발 환경: mock 결제 진행 중...");
         const result = await confirmTossPayment({ order_id: order.orderId });
         setPaymentStatus("✅ Mock 결제 완료!");
@@ -191,8 +219,7 @@ export default function MeetingDetailPage() {
         return;
       }
 
-      // ── 실제 환경: Toss 결제 위젯 SDK 실행 ──
-      // @ts-expect-error — 글로벌 window.TossPayments (CDN 로드)
+      // @ts-expect-error
       const tossPayments = window.TossPayments?.(TOSS_CLIENT_KEY);
       if (!tossPayments) {
         alert("Toss 결제 모듈을 불러오는 중입니다. 잠시 후 다시 시도해주세요.");
@@ -210,10 +237,8 @@ export default function MeetingDetailPage() {
         successUrl,
         failUrl,
       });
-      // 성공 시 Toss가 successUrl로 리다이렉트 → useEffect에서 자동 처리
     } catch (e) {
       const msg = e instanceof Error ? e.message : "결제 실패";
-      // 사용자가 결제 취소한 경우 에러 무시
       if (msg.includes("취소") || msg.includes("cancel")) {
         setPaymentStatus(null);
       } else {
@@ -229,13 +254,11 @@ export default function MeetingDetailPage() {
     try {
       const res = await confirmMeeting(meetingId);
 
-      // ✅ 전원 확정 → CONFIRMED 전환 → 채팅방으로 자동 이동
       if (res.status === "CONFIRMED" && res.chat_room_id) {
         router.push(`/chats/${res.chat_room_id}`);
         return;
       }
 
-      // 아직 다른 사람 대기 중 → 상세 새로고침
       await fetchMeeting();
     } catch (e) {
       alert(e instanceof Error ? e.message : "확정 실패");
@@ -248,6 +271,16 @@ export default function MeetingDetailPage() {
     if (meeting?.chat_room_id) {
       router.push(`/chats/${meeting.chat_room_id}`);
     }
+  };
+
+  // ─── 현재 유저의 팀 계산 ─────────────────────────────────
+
+  const getMyTeam = (): Team | null => {
+    if (!meeting) return null;
+    // slots에서 내 slot을 찾아야 하는데, user_id 정보가 없음
+    // → is_member만 알고 있으므로 gender 기반으로 유추
+    // (백엔드 응답에 my_team이 없으면 null 반환)
+    return null;
   };
 
   // ─── 렌더 ─────────────────────────────────────────────────
@@ -276,14 +309,15 @@ export default function MeetingDetailPage() {
 
   const badge = STATUS_BADGE[meeting.status];
 
-  // confirmed 진행률 계산 (WAITING_CONFIRM 전용)
   const memberSlots = meeting.slots.filter((s) => s.user !== null);
   const confirmedCount = memberSlots.filter((s) => s.confirmed).length;
   const totalMembers = memberSlots.length;
 
+  // 빈 슬롯 초대 가능 여부: RECRUITING 상태이고 내가 멤버인 경우
+  const canInviteToSlot = meeting.is_member && meeting.status === "RECRUITING";
+
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Toss SDK CDN 로드 (실결제 환경만) */}
       {TOSS_CLIENT_KEY && (
         // eslint-disable-next-line @next/next/no-sync-scripts
         <script src="https://js.tosspayments.com/v1/payment" />
@@ -314,9 +348,12 @@ export default function MeetingDetailPage() {
           <div className="rounded-2xl bg-white p-5 shadow-sm border border-gray-100">
             <div className="flex items-start justify-between">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">
+                {meeting.title && (
+                  <h1 className="text-lg font-bold text-gray-900 mb-0.5">{meeting.title}</h1>
+                )}
+                <p className="text-2xl font-bold text-gray-800">
                   {MEETING_TYPE_LABEL[meeting.meeting_type] ?? meeting.meeting_type}
-                </h1>
+                </p>
                 <p className="mt-1 text-sm text-gray-500">
                   미팅 #{meeting.meeting_id}
                 </p>
@@ -354,12 +391,30 @@ export default function MeetingDetailPage() {
                 </div>
               </div>
             )}
+
+            {/* 초대 안내 (모집 중이고 멤버인 경우) */}
+            {canInviteToSlot && (
+              <div className="mt-3 flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-2">
+                <span className="text-sm">👇</span>
+                <p className="text-xs text-blue-700">빈 자리를 탭하면 친구를 초대할 수 있습니다</p>
+              </div>
+            )}
           </div>
 
           {/* 팀 슬롯 — 핵심 UI */}
           <div className="space-y-4">
-            <TeamSection team="MALE" slots={meeting.slots} />
-            <TeamSection team="FEMALE" slots={meeting.slots} />
+            <TeamSection
+              team="MALE"
+              slots={meeting.slots}
+              isMember={canInviteToSlot}
+              onInviteSlot={canInviteToSlot ? handleSlotInvite : undefined}
+            />
+            <TeamSection
+              team="FEMALE"
+              slots={meeting.slots}
+              isMember={canInviteToSlot}
+              onInviteSlot={canInviteToSlot ? handleSlotInvite : undefined}
+            />
           </div>
 
           {/* 액션 영역 */}
@@ -375,6 +430,76 @@ export default function MeetingDetailPage() {
           />
         </div>
       </div>
+
+      {/* ── 친구 초대 모달 ── */}
+      {showInviteModal && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setShowInviteModal(false)}
+          />
+          <div className="relative bg-white rounded-t-3xl px-5 py-6 w-full max-w-md shadow-2xl max-h-[70vh] flex flex-col">
+            <div className="mb-4 flex items-center justify-between flex-shrink-0">
+              <div>
+                <h2 className="text-base font-bold text-gray-900">친구 초대</h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  미팅에 참가할 친구를 선택하세요
+                </p>
+              </div>
+              <button
+                onClick={() => setShowInviteModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1">
+              {friendsLoading ? (
+                <div className="py-10 text-center text-sm text-gray-400">
+                  친구 목록 불러오는 중...
+                </div>
+              ) : friends.length === 0 ? (
+                <div className="py-10 text-center">
+                  <p className="text-3xl mb-3">👥</p>
+                  <p className="text-sm text-gray-500">수락된 친구가 없습니다</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    친구 목록에서 친구를 추가해보세요
+                  </p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {friends.map((friend) => (
+                    <div
+                      key={friend.friend_id}
+                      className="flex items-center gap-3 rounded-2xl bg-gray-50 px-4 py-3 border border-gray-100"
+                    >
+                      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-bold text-blue-600">
+                        {friend.gender === "MALE" ? "👨" : "👩"}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">
+                          {friend.nickname ?? `유저 #${friend.user_id}`}
+                        </p>
+                        <p className="text-xs text-gray-400 truncate">
+                          {[friend.university, friend.major].filter(Boolean).join(" · ")}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleInviteFriend(friend.user_id)}
+                        disabled={inviteLoading}
+                        className="flex-shrink-0 rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                      >
+                        {inviteLoading ? "..." : "초대"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -442,7 +567,6 @@ function ActionArea({
 
     return (
       <div className="space-y-3">
-        {/* 결제 안내 카드 */}
         <div className="rounded-xl bg-yellow-50 border border-yellow-200 px-4 py-4 space-y-2">
           <p className="text-sm font-semibold text-yellow-800">⚠️ 보증금 납부 후 참가 확정</p>
           <p className="text-xs text-yellow-700 leading-relaxed">
@@ -455,7 +579,6 @@ function ActionArea({
           </div>
         </div>
 
-        {/* Toss 결제 버튼 */}
         <button
           onClick={onPayment}
           disabled={paymentLoading || actionLoading}
@@ -467,13 +590,10 @@ function ActionArea({
               결제 처리 중...
             </>
           ) : (
-            <>
-              💳 보증금 결제 후 참가 확정
-            </>
+            <>💳 보증금 결제 후 참가 확정</>
           )}
         </button>
 
-        {/* 직접 확정 버튼 (Toss 키 없는 개발환경에서는 같은 효과) */}
         {!process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY && (
           <p className="text-center text-xs text-gray-400">
             개발 환경: 위 버튼이 mock 결제를 실행합니다

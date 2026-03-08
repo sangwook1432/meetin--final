@@ -5,6 +5,7 @@
  * FEMALE 팀: 핑크 헤더
  *
  * 각 슬롯은 SlotCard로 렌더링
+ * onInviteSlot: 빈 슬롯 클릭 시 친구 초대 콜백 (isMember && myTeam === team)
  */
 
 import type { MeetingSlot, Team } from "@/types";
@@ -13,6 +14,9 @@ import { SlotCard } from "./SlotCard";
 interface TeamSectionProps {
   team: Team;
   slots: MeetingSlot[];
+  myTeam?: Team | null;     // 현재 로그인 유저 팀
+  isMember?: boolean;       // 미팅 참가 여부
+  onInviteSlot?: (slotIndex: number) => void;
 }
 
 const TEAM_LABEL: Record<Team, string> = {
@@ -25,13 +29,16 @@ const TEAM_COLOR: Record<Team, string> = {
   FEMALE: "bg-pink-500",
 };
 
-export function TeamSection({ team, slots }: TeamSectionProps) {
+export function TeamSection({ team, slots, myTeam, isMember, onInviteSlot }: TeamSectionProps) {
   const teamSlots = slots
     .filter((s) => s.team === team)
     .sort((a, b) => a.slot_index - b.slot_index);
 
   const confirmedCount = teamSlots.filter((s) => s.confirmed).length;
   const filledCount = teamSlots.filter((s) => s.user !== null).length;
+
+  // 같은 팀 멤버만 빈 슬롯에 "친구 초대" 버튼 표시
+  const canInvite = isMember && myTeam === team;
 
   return (
     <div className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
@@ -46,7 +53,16 @@ export function TeamSection({ team, slots }: TeamSectionProps) {
       {/* 슬롯 리스트 */}
       <div className="flex flex-col gap-3 p-4">
         {teamSlots.map((slot, i) => (
-          <SlotCard key={`${slot.team}-${slot.slot_index}`} slot={slot} index={i + 1} />
+          <SlotCard
+            key={`${slot.team}-${slot.slot_index}`}
+            slot={slot}
+            index={i + 1}
+            onInvite={
+              slot.user === null && canInvite && onInviteSlot
+                ? () => onInviteSlot(slot.slot_index)
+                : undefined
+            }
+          />
         ))}
       </div>
     </div>

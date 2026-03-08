@@ -2,24 +2,43 @@
  * SlotCard — 미팅 상세 페이지의 각 슬롯 UI
  *
  * 상태 표시 규칙:
- *   - user 없음            → 빈 슬롯 (점선 박스)
+ *   - user 없음            → 빈 슬롯 (점선 박스) → 클릭 시 친구 초대 가능
  *   - user 있음 + confirmed → ✅ 초록 뱃지 "확정"
  *   - user 있음 + !confirmed → 🕐 노란 뱃지 "대기중"
- *
- * WAITING_CONFIRM 상태에서 확정/대기 여부가 핵심 UI임
  */
 
 import type { MeetingSlot } from "@/types";
 
 interface SlotCardProps {
   slot: MeetingSlot;
-  index: number;  // 화면 표시용 1-based 번호
+  index: number;       // 화면 표시용 1-based 번호
+  onInvite?: () => void;   // 빈 슬롯 클릭 시 호출 (isMember && same team)
 }
 
-export function SlotCard({ slot, index }: SlotCardProps) {
+export function SlotCard({ slot, index, onInvite }: SlotCardProps) {
   const isEmpty = slot.user === null;
 
   if (isEmpty) {
+    if (onInvite) {
+      // 클릭 가능한 빈 슬롯 (같은 팀 멤버에게 표시)
+      return (
+        <button
+          onClick={onInvite}
+          className="flex w-full items-center gap-3 rounded-xl border-2 border-dashed border-blue-300 bg-blue-50 p-4 text-blue-500 hover:border-blue-400 hover:bg-blue-100 active:scale-[0.98] transition-all"
+        >
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-200 text-sm font-semibold text-blue-700">
+            {index}
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-sm font-semibold text-blue-700">빈 자리</p>
+            <p className="text-xs text-blue-500">탭하여 친구 초대</p>
+          </div>
+          <span className="text-blue-400 text-lg">+</span>
+        </button>
+      );
+    }
+
+    // 초대 불가능한 빈 슬롯 (일반)
     return (
       <div className="flex items-center gap-3 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 p-4 text-gray-400">
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-200 text-sm font-semibold text-gray-500">

@@ -674,3 +674,81 @@ def get_meeting_detail(
         },
         "slots": slot_out,
     }
+
+
+# ─── POST /meetings/{meeting_id}/invite-friend ──────────────────────────────
+
+from pydantic import BaseModel as _BaseModel
+
+class InviteFriendIn(_BaseModel):
+    friend_user_id: int
+
+
+@router.post("/meetings/{meeting_id}/invite-friend")
+def invite_friend_to_meeting(
+    meeting_id: int,
+    payload: InviteFriendIn,
+    db: Session = Depends(get_db),
+    user=Depends(require_verified),
+):
+    """
+    같은 성별 빈 슬롯에 친구를 초대합니다.
+    - 호출자가 미팅 멤버여야 함
+    - 초대 대상은 VERIFIED 유저여야 함
+    - 초대 대상은 이미 멤버가 아니어야 함
+    - 알림 전송
+    """
+    from app.models.notification import Notification, NotiType
+
+    meeting = db.get(Meeting, meeting_id)
+    if not meeting:
+        raise HTTPException(404, "미팅을 찾을 수 없습니다.")
+
+    if meeting.status not in (MeetingStatus.RECRUITING, MeetingStatus.FULL):
+        raise HTTPException(400, "모집 중인 미팅에만 친구를 초대할 수 있습니다.")
+
+    slots = db.execute(
+        select(MeetingSlot).where(MeetingSlot.meeting_id == meeting_id)
+    ).scalars().all()
+
+    # 호출자가 멤버인지 확인
+    caller_slot = next((s for s in slots if s.user_id == user.id), None)
+    if not caller_slot:
+        raise HTTPException(403, "미팅 멤버만 친구를 초대할 수 있습니다.")
+
+    # 초대 대상 유저 확인
+    friend = db.get(User, payload.friend_user_id)
+    if not friend:
+        raise HTTPException(404, "초대 대상 유저를 찾을 수 없습니다.")
+
+    if friend.verification_status != "VERIFIED":
+        raise HTTPException(400, "인증된 사용자만 초대할 수 있습니다.")
+
+    # 이미 멤버인지 확인
+    already_member = any(s.user_id == payload.friend_user_id for s in slots)
+    if already_member:
+        raise HTTPException(400, "이미 미팅에 참가한 사용자입니다.")
+
+    # 같은 성별 빈 슬롯이 있는지 확인
+    caller_team = caller_slot.team
+    empty_same_team = [s for s in slots if s.team == caller_team and s.user_id is None]
+    if not empty_same_team:
+        raise HTTPException(400, "같은 팀에 빈 자리가 없습니다.")
+
+    # 알림 전송
+    n = Notification(
+        user_id=payload.friend_user_id,
+        noti_type=NotiType.MEETING_INVITE,
+        title="미팅 초대가 왔어요! 🎉",
+        body=f"{user.nickname or '멤버'}님이 미팅 #{meeting_id}에 초대했습니다. 참가해보세요!",
+        related_meeting_id=meeting_id,
+        related_user_id=user.id,
+    )
+    db.add(n)
+    db.commit()
+
+    return {
+        "status": "invited",
+        "friend_id": payload.friend_user_id,
+        "meeting_id": meeting_id,
+    }
