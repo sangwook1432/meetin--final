@@ -38,6 +38,7 @@ from app.models.chat_room import ChatRoom
 from app.models.meeting_slot import MeetingSlot
 from app.models.user import User
 from app.services.notification import notify
+from app.models.notification import Notification, NotiType
 
 router = APIRouter()
 
@@ -58,7 +59,8 @@ except ImportError:
             return wrapper
         return decorator
 
-DEPOSIT_AMOUNT = 10_000  # 10,000원 (정책: 10,000~20,000 KRW)
+DEPOSIT_AMOUNT = 5_000   # 5,000원 (정책 변경: 채팅방 개설 시 5,000원 차감)
+DEPOSIT_REFUND_AMOUNT = 4_000  # 성공 시 4,000원 환불 (1,000원은 플랫폼 수수료)
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -368,6 +370,25 @@ def confirm_payment(
                     db.rollback()
                     # 이미 다른 트랜잭션에서 생성됨 — 무시
 
+            # ── 전원 확정 시 4,000원 환불 (잔액 반환) ─────────────
+            # 5,000원 보증금 중 4,000원 환불, 1,000원은 플랫폼 수수료
+            for m_slot in member_slots:
+                if m_slot.user_id is None:
+                    continue
+                target_user = db.execute(
+                    select(User).where(User.id == m_slot.user_id).with_for_update()
+                ).scalar_one_or_none()
+                if target_user:
+                    target_user.balance += DEPOSIT_REFUND_AMOUNT
+                    db.add(WalletTransaction(
+                        user_id=target_user.id,
+                        amount=DEPOSIT_REFUND_AMOUNT,
+                        balance_after=target_user.balance,
+                        tx_type=WalletTxType.DEPOSIT_REFUND,
+                        meeting_id=meeting.id,
+                        note=f"미팅 #{meeting.id} 확정 — 보증금 환불 (수수료 1,000원 차감)",
+                    ))
+
         db.commit()
 
         chat_room = db.execute(
@@ -490,4 +511,134 @@ async def refund_deposit(
         "deposit_id": deposit.id,
         "amount": deposit.amount,
         "toss_result": result,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────
+# 5) 잔액으로 보증금 납부 (Toss 결제 없이 지갑 잔액 사용)
+# ─────────────────────────────────────────────────────────────────
+
+@router.post("/payments/deposits/pay-with-balance")
+def pay_deposit_with_balance(
+    meeting_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(require_verified),
+):
+    """
+    지갑 잔액으로 보증금 납부 (Toss 결제 없이).
+
+    - WAITING_CONFIRM 상태 미팅 멤버만 호출 가능
+    - 잔액 부족 시 400
+    - 성공 시 slot.confirmed = True + 전원 확정이면 CONFIRMED
+    """
+    from app.models.wallet_transaction import WalletTransaction, TxType as WalletTxType
+    from sqlalchemy.exc import IntegrityError as _IntegrityError
+
+    meeting = db.get(Meeting, meeting_id)
+    if not meeting:
+        raise HTTPException(404, "Meeting not found")
+
+    if meeting.status != MeetingStatus.WAITING_CONFIRM:
+        raise HTTPException(400, f"결제는 WAITING_CONFIRM 상태에서만 가능합니다. (현재: {meeting.status.value})")
+
+    slot = _ensure_user_is_meeting_member(db, meeting_id, user.id)
+
+    if slot.confirmed:
+        chat_room = db.execute(
+            select(ChatRoom).where(ChatRoom.meeting_id == meeting_id)
+        ).scalar_one_or_none()
+        return {"status": "already_confirmed", "meeting_id": meeting_id, "chat_room_id": chat_room.id if chat_room else None}
+
+    # 잔액 확인
+    u = db.execute(select(User).where(User.id == user.id).with_for_update()).scalar_one()
+    if u.balance < DEPOSIT_AMOUNT:
+        raise HTTPException(400, f"잔액이 부족합니다. (현재: {u.balance:,}원, 필요: {DEPOSIT_AMOUNT:,}원)")
+
+    # 잔액 차감
+    u.balance -= DEPOSIT_AMOUNT
+
+    # WalletTransaction 기록
+    wt = WalletTransaction(
+        user_id=u.id,
+        amount=-DEPOSIT_AMOUNT,
+        balance_after=u.balance,
+        tx_type=WalletTxType.DEPOSIT_HOLD,
+        meeting_id=meeting_id,
+        note=f"미팅 #{meeting_id} 보증금 (지갑 잔액 사용)",
+    )
+    db.add(wt)
+
+    # Deposit row 생성 (payment_key 없음)
+    import uuid as _uuid
+    order_id = str(_uuid.uuid4())
+    deposit = Deposit(
+        meeting_id=meeting_id,
+        user_id=user.id,
+        amount=DEPOSIT_AMOUNT,
+        status=DepositStatus.HELD,
+        toss_order_id=order_id,
+        toss_payment_key=None,  # 잔액 납부 → Toss 환불 없음
+    )
+    db.add(deposit)
+
+    # slot.confirmed = True
+    slot_obj = db.execute(
+        select(MeetingSlot).where(
+            MeetingSlot.meeting_id == meeting_id,
+            MeetingSlot.user_id == user.id,
+        ).with_for_update()
+    ).scalar_one()
+    slot_obj.confirmed = True
+    db.flush()
+
+    # 전원 확정 체크
+    all_slots = db.execute(
+        select(MeetingSlot).where(MeetingSlot.meeting_id == meeting_id)
+    ).scalars().all()
+    member_slots = [s for s in all_slots if s.user_id is not None]
+    all_confirmed = member_slots and all(s.confirmed for s in member_slots)
+
+    if all_confirmed:
+        meeting.status = MeetingStatus.CONFIRMED
+        existing_room = db.execute(
+            select(ChatRoom).where(ChatRoom.meeting_id == meeting.id)
+        ).scalar_one_or_none()
+        if not existing_room:
+            db.add(ChatRoom(meeting_id=meeting.id))
+            try:
+                db.flush()
+            except _IntegrityError:
+                db.rollback()
+
+        # 4,000원 환불
+        for m_slot in member_slots:
+            if m_slot.user_id is None:
+                continue
+            target_user = db.execute(
+                select(User).where(User.id == m_slot.user_id).with_for_update()
+            ).scalar_one_or_none()
+            if target_user:
+                target_user.balance += DEPOSIT_REFUND_AMOUNT
+                db.add(WalletTransaction(
+                    user_id=target_user.id,
+                    amount=DEPOSIT_REFUND_AMOUNT,
+                    balance_after=target_user.balance,
+                    tx_type=WalletTxType.DEPOSIT_REFUND,
+                    meeting_id=meeting.id,
+                    note=f"미팅 #{meeting.id} 확정 — 보증금 환불 (수수료 1,000원 차감)",
+                ))
+
+    db.commit()
+
+    chat_room = db.execute(
+        select(ChatRoom).where(ChatRoom.meeting_id == meeting.id)
+    ).scalar_one_or_none()
+
+    return {
+        "status": "confirmed",
+        "meeting_id": meeting.id,
+        "meeting_status": meeting.status.value,
+        "chat_room_id": chat_room.id if chat_room else None,
+        "balance_used": DEPOSIT_AMOUNT,
+        "balance_remaining": u.balance,
     }

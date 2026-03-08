@@ -110,6 +110,233 @@ export interface MeetingListItem {
 // 채팅 메시지
 // ─────────────────────────────────────────────
 
+export type ChatMsgType = "NORMAL" | "SYSTEM" | "SCHEDULE_PROPOSE" | "CANCEL_REQUEST";
+
+export interface ChatMessage {
+  id: number;
+  room_id: number;
+  sender_user_id: number;
+  sender_nickname?: string | null;
+  sender_photo_url?: string | null;
+  content: string;
+  msg_type: ChatMsgType;
+  created_at: string;
+}
+
+// ─────────────────────────────────────────────
+// API 응답 타입들
+// ─────────────────────────────────────────────
+
+export interface ConfirmResponse {
+  meeting_id: number;
+  status: MeetingStatus;
+  confirmed: boolean;
+  already_confirmed?: boolean;
+  chat_room_id: number | null;
+}
+
+// ─────────────────────────────────────────────
+// 내가 참여한 미팅 아이템 (GET /meetings/my)
+// ─────────────────────────────────────────────
+
+export interface MyMeetingItem {
+  meeting_id: number;
+  meeting_type: MeetingType;
+  status: MeetingStatus;
+  host_user_id: number;
+  is_host: boolean;
+  my_confirmed: boolean;
+  preferred_universities_raw: string | null;
+  preferred_universities_any: boolean;
+  filled: {
+    male: number;
+    female: number;
+    total: number;
+    capacity: number;
+  };
+}
+
+// ─────────────────────────────────────────────
+// 지갑 트랜잭션
+// ─────────────────────────────────────────────
+
+export type TxType =
+  | "CHARGE"
+  | "DEPOSIT_HOLD"
+  | "DEPOSIT_REFUND"
+  | "WITHDRAW"
+  | "WITHDRAW_DONE"
+  | "ADMIN_ADJUST";
+
+export interface WalletTransaction {
+  id: number;
+  tx_type: TxType;
+  amount: number;
+  balance_after: number;
+  meeting_id: number | null;
+  note: string | null;
+  created_at: string;
+}
+
+// ─────────────────────────────────────────────
+// 친구
+// ─────────────────────────────────────────────
+
+export type FriendStatus = "PENDING" | "ACCEPTED" | "REJECTED";
+
+export interface FriendItem {
+  friend_id: number;
+  user_id: number;
+  nickname: string | null;
+  university: string | null;
+  major: string | null;
+  gender: Gender | null;
+  photo_url_1: string | null;
+  status: FriendStatus;
+  created_at?: string;
+}
+
+// ─────────────────────────────────────────────
+// 알림
+// ─────────────────────────────────────────────
+
+export type NotiType =
+  | "FRIEND_REQUEST"
+  | "FRIEND_ACCEPTED"
+  | "MEETING_INVITE"
+  | "MEETING_CONFIRMED"
+  | "SLOT_VACANCY"
+  | "DEPOSIT_REFUNDED"
+  | "SYSTEM";
+
+export interface NotificationItem {
+  id: number;
+  noti_type: NotiType;
+  title: string;
+  body: string;
+  is_read: boolean;
+  related_user_id: number | null;
+  related_meeting_id: number | null;
+  related_friend_id: number | null;
+  created_at: string;
+}
+
+// ─────────────────────────────────────────────
+// 미팅 일정
+// ─────────────────────────────────────────────
+
+export type ScheduleStatus = "PROPOSED" | "CONFIRMED" | "CANCELLED";
+
+export interface MeetingScheduleItem {
+  id: number;
+  scheduled_at: string;
+  location: string | null;
+  note: string | null;
+  status: ScheduleStatus;
+  proposed_by: number;
+}
+
+
+// ─────────────────────────────────────────────
+// 로그인 유저 전체 프로필 (GET /me)
+// ─────────────────────────────────────────────
+
+export interface UserPublic {
+  id: number;
+  email: string;
+  phone_last4: string;
+  verification_status: VerificationStatus;
+  is_admin: boolean;
+  nickname: string | null;
+  gender: Gender | null;
+  university: string | null;
+  major: string | null;
+  entry_year: number | null;
+  age: number | null;
+  preferred_area: string | null;
+  bio_short: string | null;
+  lookalike_type: LookalikeType | null;
+  lookalike_value: string | null;
+  photo_url_1: string | null;
+  photo_url_2: string | null;
+  balance: number;
+}
+
+// ─────────────────────────────────────────────
+// 슬롯 안에서 보이는 공개 프로필
+// ─────────────────────────────────────────────
+
+export interface PublicProfile {
+  user_id: number;
+  university: string | null;
+  major: string | null;
+  entry_year: number | null;
+  entry_label: string | null;
+  age: number | null;
+  preferred_area: string | null;
+  bio_short: string | null;
+  lookalike_type: LookalikeType | null;
+  lookalike_value: string | null;
+  photo_url_1: string | null;
+  photo_url_2: string | null;
+}
+
+// ─────────────────────────────────────────────
+// 미팅 슬롯
+// ─────────────────────────────────────────────
+
+export interface MeetingSlot {
+  team: Team;
+  slot_index: number;
+  user: PublicProfile | null;
+  confirmed: boolean;
+}
+
+// ─────────────────────────────────────────────
+// 미팅 상세 (GET /meetings/{id})
+// ─────────────────────────────────────────────
+
+export interface MeetingDetail {
+  meeting_id: number;
+  meeting_type: MeetingType;
+  status: MeetingStatus;
+  host_user_id: number;
+  is_member: boolean;
+  my_confirmed: boolean;
+  chat_room_id: number | null;
+  filled: {
+    male: number;
+    female: number;
+    total: number;
+    capacity: number;
+  };
+  slots: MeetingSlot[];
+}
+
+// ─────────────────────────────────────────────
+// 미팅 리스트 아이템 (discover / vacancies)
+// ─────────────────────────────────────────────
+
+export interface MeetingListItem {
+  meeting_id: number;
+  meeting_type: MeetingType;
+  status: MeetingStatus;
+  remaining_my_team: number;
+  preferred_universities_raw: string | null;
+  preferred_universities_any: boolean;
+  is_member: boolean;
+  filled: {
+    male: number;
+    female: number;
+    total: number;
+    capacity: number;
+  };
+}
+
+// ─────────────────────────────────────────────
+// 채팅 메시지
+// ─────────────────────────────────────────────
+
 export interface ChatMessage {
   id: number;
   room_id: number;

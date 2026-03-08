@@ -15,6 +15,9 @@ import type {
   MeetingType,
   UserPublic,
   WalletTransaction,
+  FriendItem,
+  NotificationItem,
+  MeetingScheduleItem,
 } from "@/types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -245,7 +248,7 @@ export async function confirmMeeting(id: number): Promise<ConfirmResponse> {
 // ─────────────────────────────────────────
 
 export async function listChats() {
-  return apiFetch<{ rooms: { room_id: number; meeting_id: number }[] }>("/chats");
+  return apiFetch<{ rooms: { room_id: number; meeting_id: number; meeting_type?: string | null; meeting_status?: string | null }[] }>("/chats");
 }
 
 export async function getMessages(roomId: number, sinceId = 0) {
@@ -371,4 +374,133 @@ export async function getWalletTransactions(limit = 50): Promise<{
   transactions: WalletTransaction[];
 }> {
   return apiFetch(`/wallet/transactions?limit=${limit}`);
+}
+
+// ─────────────────────────────────────────────────────────
+// Friends (친구)
+// ─────────────────────────────────────────────────────────
+
+/** GET /friends — 내 친구 목록 */
+export async function getFriends(): Promise<{ friends: FriendItem[] }> {
+  return apiFetch("/friends");
+}
+
+/** GET /friends/requests — 받은 친구 신청 목록 */
+export async function getFriendRequests(): Promise<{ requests: FriendItem[] }> {
+  return apiFetch("/friends/requests");
+}
+
+/** POST /friends/request — 전화번호로 친구 신청 */
+export async function sendFriendRequest(phone: string): Promise<{
+  status: string;
+  friend_id: number;
+  addressee_id: number;
+}> {
+  return apiFetch("/friends/request", {
+    method: "POST",
+    body: JSON.stringify({ phone }),
+  });
+}
+
+/** POST /friends/{id}/accept — 친구 수락 */
+export async function acceptFriendRequest(friendId: number): Promise<{ status: string; friend_id: number }> {
+  return apiFetch(`/friends/${friendId}/accept`, { method: "POST" });
+}
+
+/** POST /friends/{id}/reject — 친구 거절 */
+export async function rejectFriendRequest(friendId: number): Promise<{ status: string; friend_id: number }> {
+  return apiFetch(`/friends/${friendId}/reject`, { method: "POST" });
+}
+
+/** DELETE /friends/{id} — 친구 삭제 */
+export async function deleteFriend(friendId: number): Promise<{ status: string }> {
+  return apiFetch(`/friends/${friendId}`, { method: "DELETE" });
+}
+
+// ─────────────────────────────────────────────────────────
+// Notifications (알림)
+// ─────────────────────────────────────────────────────────
+
+/** GET /notifications — 알림 목록 */
+export async function getNotifications(params?: { unread_only?: boolean; limit?: number }): Promise<{
+  notifications: NotificationItem[];
+}> {
+  const qs = new URLSearchParams();
+  if (params?.unread_only) qs.set("unread_only", "true");
+  if (params?.limit) qs.set("limit", String(params.limit));
+  const q = qs.toString() ? `?${qs}` : "";
+  return apiFetch(`/notifications${q}`);
+}
+
+/** GET /notifications/unread-count — 미읽 알림 수 */
+export async function getUnreadCount(): Promise<{ unread_count: number }> {
+  return apiFetch("/notifications/unread-count");
+}
+
+/** POST /notifications/{id}/read — 읽음 처리 */
+export async function markNotificationRead(id: number): Promise<{ status: string }> {
+  return apiFetch(`/notifications/${id}/read`, { method: "POST" });
+}
+
+/** POST /notifications/read-all — 전체 읽음 */
+export async function markAllNotificationsRead(): Promise<{ status: string }> {
+  return apiFetch("/notifications/read-all", { method: "POST" });
+}
+
+// ─────────────────────────────────────────────────────────
+// Chat extensions (채팅 확장)
+// ─────────────────────────────────────────────────────────
+
+/** POST /chats/{roomId}/leave — 나가기 */
+export async function leaveChat(roomId: number, payload: {
+  mode: "substitute" | "forfeit";
+  substitute_phone?: string;
+}): Promise<{ status: string }> {
+  return apiFetch(`/chats/${roomId}/leave`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** POST /chats/{roomId}/cancel-request — 취소 요청 채팅 */
+export async function requestCancelMeeting(roomId: number): Promise<{ status: string; message_id: number }> {
+  return apiFetch(`/chats/${roomId}/cancel-request`, { method: "POST" });
+}
+
+/** POST /chats/{roomId}/cancel-confirm — 취소 확정 (호스트) */
+export async function confirmCancelMeeting(roomId: number): Promise<{ status: string }> {
+  return apiFetch(`/chats/${roomId}/cancel-confirm`, { method: "POST" });
+}
+
+/** POST /chats/{roomId}/schedule-propose — 일정 제안 */
+export async function proposeSchedule(roomId: number, payload: {
+  scheduled_at: string;
+  location?: string;
+  note?: string;
+}): Promise<{ status: string; schedule_id: number; scheduled_at: string; location: string | null }> {
+  return apiFetch(`/chats/${roomId}/schedule-propose`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** GET /chats/{roomId}/schedule — 현재 일정 조회 */
+export async function getMeetingSchedule(roomId: number): Promise<{ schedule: MeetingScheduleItem | null }> {
+  return apiFetch(`/chats/${roomId}/schedule`);
+}
+
+// ─────────────────────────────────────────────────────────
+// Balance pay deposit (잔액으로 보증금 납부)
+// ─────────────────────────────────────────────────────────
+
+/** POST /payments/deposits/pay-with-balance — 잔액으로 보증금 납부 */
+export async function payDepositWithBalance(meetingId: number): Promise<{
+  status: string;
+  meeting_id: number;
+  meeting_status: string;
+  chat_room_id: number | null;
+  balance_used?: number;
+  balance_remaining?: number;
+}> {
+  return apiFetch(`/payments/deposits/pay-with-balance?meeting_id=${meetingId}`, { method: "POST" });
 }
