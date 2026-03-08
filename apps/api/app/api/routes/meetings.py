@@ -328,7 +328,21 @@ def confirm_meeting(
 
     slot.confirmed = True
 
-    # 전체 슬롯 확인
+    # 잔액에서 보증금 차감 (무결제 confirm 경로도 동일)
+    from app.models.wallet_transaction import WalletTransaction, TxType
+    DEPOSIT_AMOUNT = 10_000
+    if user.balance < DEPOSIT_AMOUNT:
+        raise HTTPException(status_code=400,
+            detail=f"잔액이 부족합니다. 현재 잔액: {user.balance:,}원 / 보증금: {DEPOSIT_AMOUNT:,}원")
+    user.balance -= DEPOSIT_AMOUNT
+    db.add(WalletTransaction(
+        user_id=user.id,
+        tx_type=TxType.DEPOSIT_DEDUCT,
+        amount=-DEPOSIT_AMOUNT,
+        balance_after=user.balance,
+        description=f"미팅 #{meeting_id} 보증금 차감",
+        ref_meeting_id=meeting_id,
+    ))
     slots = db.execute(
         select(MeetingSlot).where(MeetingSlot.meeting_id == meeting_id)
     ).scalars().all()

@@ -21,6 +21,7 @@ class UserPublic(BaseModel):
     lookalike_value: str | None = None
     photo_url_1: str | None = None
     photo_url_2: str | None = None
+    balance: int = 0
 
     class Config:
         from_attributes = True

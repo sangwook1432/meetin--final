@@ -65,3 +65,6 @@ class User(Base):
 
     photo_url_1: Mapped[str | None] = mapped_column(Text, nullable=True)
     photo_url_2: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # 잔액 (단위: 원) — Toss 충전으로만 증가, 보증금 차감/환급으로 변동
+    balance: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

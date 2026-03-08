@@ -303,3 +303,223 @@ export async function getMyDeposits(meetingId?: number): Promise<{
   const qs = meetingId !== undefined ? `?meeting_id=${meetingId}` : "";
   return apiFetch(`/payments/deposits/me${qs}`);
 }
+
+// ─────────────────────────────────────────
+// Chat Room
+// ─────────────────────────────────────────
+
+/** GET /chats/{roomId}/info — 채팅방 메타 정보 (host_user_id 등) */
+export async function getChatRoomInfo(roomId: number): Promise<{
+  room_id: number;
+  meeting_id: number;
+  host_user_id: number;
+  meeting_type: string;
+  schedule: { date: string; time: string; place: string; confirmed: boolean } | null;
+}> {
+  return apiFetch(`/chats/${roomId}/info`);
+}
+
+/** POST /chats/{roomId}/leave — 채팅방 나가기 */
+export async function leaveChatRoom(
+  roomId: number,
+  leaveType: "forfeit" | "replace",
+  replacePhone?: string
+): Promise<{ status: string; message?: string; meeting_status?: string }> {
+  return apiFetch(`/chats/${roomId}/leave`, {
+    method: "POST",
+    body: JSON.stringify({ leave_type: leaveType, replace_phone: replacePhone ?? null }),
+  });
+}
+
+/** POST /chats/{roomId}/schedule — 미팅 일정 설정 (HOST만) */
+export async function setMeetingSchedule(
+  roomId: number,
+  payload: { date: string; time: string; place: string }
+): Promise<{ status: string; schedule: { date: string; time: string; place: string } }> {
+  return apiFetch(`/chats/${roomId}/schedule`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** GET /meetings/{meetingId}/schedule — 미팅 일정 조회 */
+export async function getMeetingSchedule(meetingId: number): Promise<{
+  date: string; time: string; place: string; confirmed: boolean;
+} | null> {
+  const res = await apiFetch<{ schedule: { date: string; time: string; place: string; confirmed: boolean } | null }>(
+    `/meetings/${meetingId}/schedule`
+  );
+  return res.schedule;
+}
+
+/** GET /me/schedule — 내 미팅 일정 목록 */
+export async function getMySchedules(): Promise<{
+  schedules: {
+    meeting_id: number;
+    meeting_type: string;
+    chat_room_id: number | null;
+    schedule: { date: string | null; time: string | null; place: string | null; confirmed: boolean };
+  }[];
+}> {
+  return apiFetch("/me/schedule");
+}
+
+// ─────────────────────────────────────────
+// Friends
+// ─────────────────────────────────────────
+
+export interface FriendItem {
+  id: number;
+  nickname: string | null;
+  gender: "MALE" | "FEMALE" | null;
+  university: string | null;
+  phone_last4: string;
+  verification_status: string;
+}
+
+/** GET /friends — 내 친구 목록 */
+export async function listFriends(): Promise<{ friends: FriendItem[] }> {
+  return apiFetch("/friends");
+}
+
+/** GET /friends/pending — 받은 친구 요청 */
+export async function pendingFriendRequests(): Promise<{
+  requests: { friendship_id: number; requester_id: number; nickname: string | null; created_at: string }[];
+}> {
+  return apiFetch("/friends/pending");
+}
+
+/** POST /friends/request — 친구 요청 (전화번호) */
+export async function sendFriendRequest(phone: string): Promise<{ status: string; target_nickname?: string }> {
+  return apiFetch("/friends/request", {
+    method: "POST",
+    body: JSON.stringify({ phone }),
+  });
+}
+
+/** POST /friends/{id}/accept — 친구 요청 수락 */
+export async function acceptFriendRequest(friendshipId: number): Promise<{ status: string }> {
+  return apiFetch(`/friends/${friendshipId}/accept`, { method: "POST" });
+}
+
+/** POST /friends/{id}/reject — 친구 요청 거절 */
+export async function rejectFriendRequest(friendshipId: number): Promise<{ status: string }> {
+  return apiFetch(`/friends/${friendshipId}/reject`, { method: "POST" });
+}
+
+// ─────────────────────────────────────────
+// Invitations (미팅 초대)
+// ─────────────────────────────────────────
+
+/** POST /invitations/meeting — 친구를 미팅에 초대 */
+export async function inviteFriendToMeeting(
+  meetingId: number,
+  inviteePhone: string
+): Promise<{ status: string; invitation_id?: number }> {
+  return apiFetch("/invitations/meeting", {
+    method: "POST",
+    body: JSON.stringify({ meeting_id: meetingId, invitee_phone: inviteePhone }),
+  });
+}
+
+/** GET /invitations/me — 내가 받은 초대 목록 */
+export async function getMyInvitations(): Promise<{
+  invitations: {
+    id: number;
+    meeting_id: number;
+    invite_type: string;
+    inviter_nickname: string | null;
+    expires_at: string;
+    created_at: string;
+  }[];
+}> {
+  return apiFetch("/invitations/me");
+}
+
+/** POST /invitations/{id}/respond — 초대 수락/거절 */
+export async function respondToInvitation(
+  invitationId: number,
+  accept: boolean
+): Promise<{ status: string; meeting_id?: number }> {
+  return apiFetch(`/invitations/${invitationId}/respond`, {
+    method: "POST",
+    body: JSON.stringify({ accept }),
+  });
+}
+
+// ─────────────────────────────────────────
+// Wallet (잔액/충전/내역)
+// ─────────────────────────────────────────
+
+/** GET /wallet/me — 잔액 조회 */
+export async function getWallet(): Promise<{
+  balance: number;
+  deposit_amount: number;
+  can_afford: boolean;
+}> {
+  return apiFetch("/wallet/me");
+}
+
+/** POST /wallet/charge/prepare — 충전 주문 생성 */
+export async function prepareCharge(amount: number): Promise<{
+  orderId: string;
+  amount: number;
+  orderName: string;
+}> {
+  return apiFetch(`/wallet/charge/prepare?amount=${amount}`, { method: "POST" });
+}
+
+/** POST /wallet/charge/confirm — 충전 확정 */
+export async function confirmCharge(payload: {
+  order_id: string;
+  payment_key: string;
+  amount: number;
+}): Promise<{ status: string; balance: number }> {
+  return apiFetch("/wallet/charge/confirm", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** GET /wallet/transactions — 거래 내역 */
+export async function getWalletTransactions(limit = 50, offset = 0): Promise<{
+  balance: number;
+  transactions: {
+    id: number;
+    tx_type: string;
+    amount: number;
+    balance_after: number;
+    description: string | null;
+    ref_meeting_id: number | null;
+    created_at: string;
+  }[];
+}> {
+  return apiFetch(`/wallet/transactions?limit=${limit}&offset=${offset}`);
+}
+
+// ─────────────────────────────────────────
+// File Upload (재학증명서 JPG)
+// ─────────────────────────────────────────
+
+/** POST /me/docs/upload — JPG 파일 업로드 */
+export async function uploadDocFile(
+  docType: "ENROLLMENT_CERT" | "STUDENT_ID",
+  file: File
+): Promise<{ id: number; doc_type: string; file_url: string; status: string }> {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("doc_type", docType);
+  formData.append("file", file);
+
+  const res = await fetch(`${BASE}/me/docs/upload`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.detail ?? `HTTP ${res.status}`);
+  }
+  return res.json();
+}

@@ -343,6 +343,26 @@ def confirm_payment(
         # slot.confirmed = True 가 확정의 유일한 근거
         slot.confirmed = True
 
+        # ── 5-c. 잔액에서 보증금 차감 ───────────────────────────
+        # Toss 결제는 잔액 충전 전용; 보증금은 잔액에서 차감
+        db_user = db.execute(
+            select(User).where(User.id == user.id).with_for_update()
+        ).scalar_one_or_none()
+        if db_user:
+            if db_user.balance < deposit.amount:
+                raise HTTPException(400, f"잔액이 부족합니다. 잔액: {db_user.balance:,}원 / 보증금: {deposit.amount:,}원")
+            db_user.balance -= deposit.amount
+            # 거래 내역 기록
+            from app.models.wallet_transaction import WalletTransaction, TxType
+            db.add(WalletTransaction(
+                user_id=db_user.id,
+                tx_type=TxType.DEPOSIT_DEDUCT,
+                amount=-deposit.amount,
+                balance_after=db_user.balance,
+                description=f"미팅 #{meeting.id} 보증금 차감",
+                ref_meeting_id=meeting.id,
+            ))
+
         db.flush()
 
         # ── 6. 전원 확정 여부 체크 ───────────────────────────────

@@ -3,20 +3,14 @@
 /**
  * /me/docs — 재학증명서 업로드 페이지
  *
- * 현재 파일 스토리지 미연동 상태(MVP)이므로:
- *  - 사용자가 외부 이미지 URL을 직접 붙여넣는 방식으로 동작
- *  - 실제 S3/R2 연동 후 <input type="file"> + presigned URL 방식으로 교체 예정
- *
- * 인증 상태에 따른 UI:
- *  - PENDING  : 업로드 폼 표시
- *  - VERIFIED : "인증 완료" 화면
- *  - REJECTED : 거절 사유 + 재업로드 가능
+ * JPG/PNG/PDF 파일을 직접 업로드하는 방식으로 변경.
+ * 백엔드 /me/docs/upload (multipart/form-data) 호출.
  */
 
-import { Suspense, useState } from "react";
+import { Suspense, useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { uploadDoc } from "@/lib/api";
+import { uploadDocFile } from "@/lib/api";
 import { AppShell } from "@/components/ui/AppShell";
 import type { DocType } from "@/types";
 
@@ -25,7 +19,6 @@ const DOC_LABELS: Record<DocType, string> = {
   STUDENT_ID: "학생증",
 };
 
-// useSearchParams를 사용하는 내부 컴포넌트 (Suspense 필요)
 function DocsInner() {
   const { user, refreshUser } = useAuth();
   const router = useRouter();
@@ -33,26 +26,39 @@ function DocsInner() {
   const isOnboarding = searchParams.get("onboarding") === "1";
 
   const [docType, setDocType] = useState<DocType>("ENROLLMENT_CERT");
-  const [fileUrl, setFileUrl] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f);
+    setError(null);
+
+    // 이미지 미리보기
+    if (f.type.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.onload = (ev) => setPreview(ev.target?.result as string);
+      reader.readAsDataURL(f);
+    } else {
+      setPreview(null);
+    }
+  };
 
   const handleUpload = async () => {
     setError(null);
-    if (!fileUrl.trim()) {
-      setError("이미지 URL을 입력해주세요");
-      return;
-    }
-    // 기본 URL 형식 체크
-    try { new URL(fileUrl.trim()); } catch {
-      setError("올바른 URL 형식이 아닙니다");
+    if (!file) {
+      setError("파일을 선택해주세요");
       return;
     }
 
     setUploading(true);
     try {
-      await uploadDoc({ doc_type: docType, file_url: fileUrl.trim() });
+      await uploadDocFile(docType, file);
       await refreshUser();
       setDone(true);
     } catch (err) {
@@ -99,21 +105,12 @@ function DocsInner() {
               서류를 제출했습니다. 관리자 검토 후 인증이 완료됩니다.
               <br />보통 24시간 이내 처리됩니다.
             </p>
-            {isOnboarding ? (
-              <button
-                onClick={() => router.push("/discover")}
-                className="mt-6 w-full rounded-xl bg-yellow-500 py-3 text-sm font-bold text-white hover:bg-yellow-600 transition-all"
-              >
-                미팅 먼저 둘러보기 →
-              </button>
-            ) : (
-              <button
-                onClick={() => router.push("/discover")}
-                className="mt-6 text-sm text-gray-500 underline"
-              >
-                확인
-              </button>
-            )}
+            <button
+              onClick={() => router.push("/discover")}
+              className="mt-6 w-full rounded-xl bg-yellow-500 py-3 text-sm font-bold text-white hover:bg-yellow-600 transition-all"
+            >
+              {isOnboarding ? "미팅 먼저 둘러보기 →" : "확인"}
+            </button>
           </div>
         </div>
       </AppShell>
@@ -124,7 +121,6 @@ function DocsInner() {
   return (
     <AppShell>
       <div className="mx-auto max-w-md px-4 py-6">
-        {/* 온보딩 배너 */}
         {isOnboarding && (
           <div className="mb-6 rounded-2xl bg-blue-50 border border-blue-100 p-4">
             <p className="font-semibold text-blue-800 text-sm">마지막 단계! 재학 인증 📄</p>
@@ -141,7 +137,6 @@ function DocsInner() {
           </div>
         )}
 
-        {/* 거절 상태 안내 */}
         {user.verification_status === "REJECTED" && (
           <div className="mb-5 rounded-xl bg-red-50 border border-red-200 px-4 py-3">
             <p className="text-sm font-semibold text-red-700">❌ 인증 거절됨</p>
@@ -175,21 +170,60 @@ function DocsInner() {
             </div>
           </div>
 
-          {/* URL 입력 */}
+          {/* 파일 업로드 영역 */}
           <div className="rounded-2xl bg-white border border-gray-100 p-4 shadow-sm">
             <p className="mb-1 text-sm font-semibold text-gray-700">
-              {DOC_LABELS[docType]} 이미지 URL
+              {DOC_LABELS[docType]} 파일 선택
             </p>
             <p className="mb-3 text-xs text-gray-400">
-              이미지를 Google Drive 등에 업로드 후 공유 링크를 붙여넣어 주세요.
+              JPG, PNG, PDF 형식 · 최대 10MB
             </p>
+
+            {/* 드래그앤드롭/클릭 업로드 영역 */}
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              className={`cursor-pointer rounded-xl border-2 border-dashed p-6 text-center transition-all hover:border-blue-400 hover:bg-blue-50 ${
+                file ? "border-blue-400 bg-blue-50" : "border-gray-200 bg-gray-50"
+              }`}
+            >
+              {preview ? (
+                <img
+                  src={preview}
+                  alt="미리보기"
+                  className="mx-auto max-h-48 rounded-lg object-contain shadow-sm"
+                />
+              ) : (
+                <div className="flex flex-col items-center gap-2">
+                  <span className="text-3xl">📁</span>
+                  <p className="text-sm font-medium text-gray-600">
+                    {file ? file.name : "파일을 선택하거나 여기에 끌어다 놓으세요"}
+                  </p>
+                  <p className="text-xs text-gray-400">JPG · PNG · PDF</p>
+                </div>
+              )}
+              {file && !preview && (
+                <p className="mt-2 text-sm font-medium text-blue-700">
+                  📎 {file.name}
+                </p>
+              )}
+            </div>
+
             <input
-              type="url"
-              value={fileUrl}
-              onChange={(e) => setFileUrl(e.target.value)}
-              placeholder="https://drive.google.com/..."
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all"
+              ref={fileInputRef}
+              type="file"
+              accept=".jpg,.jpeg,.png,.pdf"
+              onChange={handleFileChange}
+              className="hidden"
             />
+
+            {file && (
+              <button
+                onClick={() => { setFile(null); setPreview(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                className="mt-2 text-xs text-gray-400 hover:text-red-500 transition-colors"
+              >
+                ✕ 파일 제거
+              </button>
+            )}
           </div>
 
           {/* 주의사항 */}
@@ -208,7 +242,7 @@ function DocsInner() {
 
           <button
             onClick={handleUpload}
-            disabled={uploading}
+            disabled={uploading || !file}
             className="w-full rounded-xl bg-blue-600 py-3.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50 active:scale-95 transition-all"
           >
             {uploading ? "제출 중..." : "제출하기"}
@@ -228,7 +262,6 @@ function DocsInner() {
   );
 }
 
-// Suspense 래퍼를 포함한 기본 export
 export default function DocsPage() {
   return (
     <Suspense fallback={<div className="flex min-h-screen items-center justify-center text-sm text-gray-400">로딩 중...</div>}>
