@@ -1,18 +1,30 @@
+import hashlib
+import bcrypt
 from datetime import datetime, timedelta, timezone
-from passlib.context import CryptContext
 from jose import jwt, JWTError
 
 from app.core.config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    # 1. SHA-256으로 사전 해싱 (Bcrypt 72바이트 길이 제한 원천 차단)
+    sha256_pw = hashlib.sha256(password.encode('utf-8')).hexdigest()
+    
+    # 2. 순수 bcrypt 라이브러리로 해싱 (DB 저장을 위해 문자열로 디코딩)
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(sha256_pw.encode('utf-8'), salt)
+    return hashed.decode('utf-8')
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    return pwd_context.verify(password, password_hash)
+    # 1. 입력받은 평문 비밀번호를 동일하게 SHA-256으로 변환
+    sha256_pw = hashlib.sha256(password.encode('utf-8')).hexdigest()
+    
+    # 2. bcrypt.checkpw로 검증 (비교를 위해 둘 다 bytes로 변환)
+    return bcrypt.checkpw(
+        sha256_pw.encode('utf-8'), 
+        password_hash.encode('utf-8')
+    )
 
 
 def create_token(*, subject: str, token_type: str, expires_delta: timedelta) -> str:

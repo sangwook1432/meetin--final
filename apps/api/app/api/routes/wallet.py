@@ -22,7 +22,7 @@ from sqlalchemy import select
 from app.core.config import settings
 from app.core.deps import get_db, require_verified
 from app.models.user import User
-from app.models.wallet_transaction import WalletTransaction, TxType
+from app.models.wallet_transaction import WalletTransaction, TxType # 경로가 다르면 맞게 수정하세요
 
 router = APIRouter()
 
@@ -39,15 +39,27 @@ class ChargeIn(BaseModel):
 
 # ─── Helpers ─────────────────────────────────────────────────────
 
-def _record_tx(db: Session, user_id: int, tx_type: TxType, amount: int,
-               balance_after: int, description: str, ref_meeting_id: int | None = None):
+def _record_tx(
+    db: Session, 
+    user_id: int, 
+    tx_type: TxType, 
+    amount: int,
+    balance_after: int, 
+    note: str, 
+    meeting_id: int | None = None,
+    toss_order_id: str | None = None,
+    toss_payment_key: str | None = None
+):
+    """DB 모델 구조에 맞게 기록 함수 업데이트 (description -> note, ref_meeting_id -> meeting_id)"""
     tx = WalletTransaction(
         user_id=user_id,
         tx_type=tx_type,
         amount=amount,
         balance_after=balance_after,
-        description=description,
-        ref_meeting_id=ref_meeting_id,
+        note=note,
+        meeting_id=meeting_id,
+        toss_order_id=toss_order_id,
+        toss_payment_key=toss_payment_key
     )
     db.add(tx)
 
@@ -58,8 +70,8 @@ def deduct_deposit(db: Session, user: User, meeting_id: int) -> None:
         raise HTTPException(400, f"잔액이 부족합니다. 현재 잔액: {user.balance:,}원 / 보증금: {DEPOSIT_AMOUNT:,}원")
     user.balance -= DEPOSIT_AMOUNT
     _record_tx(
-        db, user.id, TxType.DEPOSIT_DEDUCT, -DEPOSIT_AMOUNT,
-        user.balance, f"미팅 #{meeting_id} 보증금 차감", meeting_id
+        db=db, user_id=user.id, tx_type=TxType.DEPOSIT_HOLD, amount=-DEPOSIT_AMOUNT,
+        balance_after=user.balance, note=f"미팅 #{meeting_id} 보증금 예치", meeting_id=meeting_id
     )
 
 
@@ -67,16 +79,17 @@ def refund_deposit(db: Session, user: User, meeting_id: int) -> None:
     """보증금 환급"""
     user.balance += DEPOSIT_AMOUNT
     _record_tx(
-        db, user.id, TxType.DEPOSIT_REFUND, DEPOSIT_AMOUNT,
-        user.balance, f"미팅 #{meeting_id} 보증금 환급", meeting_id
+        db=db, user_id=user.id, tx_type=TxType.DEPOSIT_REFUND, amount=DEPOSIT_AMOUNT,
+        balance_after=user.balance, note=f"미팅 #{meeting_id} 보증금 환급", meeting_id=meeting_id
     )
 
 
 def forfeit_deposit(db: Session, user: User, meeting_id: int) -> None:
-    """보증금 몰수 (채팅방 나가기)"""
+    """보증금 몰수 (채팅방 나가기) - TxType은 임의로 HOLD 유지 혹은 별도 타입 지정 가능"""
+    # 임시로 ADMIN_ADJUST를 사용하거나 TxType에 FORFEIT을 추가하는 것이 좋습니다.
     _record_tx(
-        db, user.id, TxType.DEPOSIT_FORFEIT, 0,
-        user.balance, f"미팅 #{meeting_id} 보증금 몰수 (나가기)", meeting_id
+        db=db, user_id=user.id, tx_type=TxType.ADMIN_ADJUST, amount=0,
+        balance_after=user.balance, note=f"미팅 #{meeting_id} 보증금 몰수 (나가기)", meeting_id=meeting_id
     )
 
 
@@ -109,15 +122,16 @@ def confirm_charge(
 ):
     """
     Toss 결제 성공 후 서버에서 실제 잔액 증가.
-    중복 처리 방지: order_id 로 기존 거래 확인.
+    중복 처리 방지: toss_order_id 로 기존 거래 확실하게 확인.
     """
-    # 중복 방지
+    # 💡 수정된 부분: 정확히 toss_order_id 컬럼으로 중복 결제 검사
     existing = db.execute(
         select(WalletTransaction).where(
             WalletTransaction.user_id == user.id,
-            WalletTransaction.description.contains(payload.order_id),
+            WalletTransaction.toss_order_id == payload.order_id,
         )
     ).scalar_one_or_none()
+    
     if existing:
         return {"status": "already_charged", "balance": user.balance}
 
@@ -144,10 +158,19 @@ def confirm_charge(
     db_user = db.execute(
         select(User).where(User.id == user.id).with_for_update()
     ).scalar_one()
+    
     db_user.balance += payload.amount
+    
+    # 💡 수정된 부분: note, toss_order_id, toss_payment_key 파라미터 전달
     _record_tx(
-        db, db_user.id, TxType.CHARGE, payload.amount,
-        db_user.balance, f"잔액 충전 (주문: {payload.order_id})"
+        db=db, 
+        user_id=db_user.id, 
+        tx_type=TxType.CHARGE, 
+        amount=payload.amount,
+        balance_after=db_user.balance, 
+        note=f"잔액 충전",
+        toss_order_id=payload.order_id,
+        toss_payment_key=payload.payment_key
     )
     db.commit()
     return {"status": "charged", "balance": db_user.balance}
@@ -184,6 +207,7 @@ def wallet_transactions(
         .offset(offset)
     ).scalars().all()
 
+    # 💡 수정된 부분: 반환되는 JSON 필드 이름을 프론트엔드가 쓰기 좋게 매핑 (description -> note 등)
     return {
         "balance": user.balance,
         "transactions": [
@@ -192,8 +216,9 @@ def wallet_transactions(
                 "tx_type": t.tx_type.value,
                 "amount": t.amount,
                 "balance_after": t.balance_after,
-                "description": t.description,
-                "ref_meeting_id": t.ref_meeting_id,
+                "note": t.note,
+                "meeting_id": t.meeting_id,
+                "toss_order_id": t.toss_order_id,
                 "created_at": t.created_at,
             }
             for t in txs
