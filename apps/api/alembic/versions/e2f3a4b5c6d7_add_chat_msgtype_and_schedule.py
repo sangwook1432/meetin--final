@@ -1,13 +1,7 @@
-"""Add msg_type to chat_messages and meeting_schedule table
-
-Revision ID: e2f3a4b5c6d7
-Revises: d1e2f3a4b5c6
-Create Date: 2025-03-08 01:00:00.000000
-"""
 from typing import Sequence, Union
-
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 revision: str = 'e2f3a4b5c6d7'
 down_revision: Union[str, None] = 'd1e2f3a4b5c6'
@@ -16,18 +10,35 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # chat_messages: msg_type 컬럼 추가 (시스템 메시지 구분)
+    # 1. 원시 SQL 구문으로 ENUM 타입 안전하게 생성 (이미 있으면 무시함)
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE chat_msg_type_enum AS ENUM ('NORMAL', 'SYSTEM', 'SCHEDULE_PROPOSE', 'CANCEL_REQUEST');
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE schedule_status_enum AS ENUM ('PROPOSED', 'CONFIRMED', 'CANCELLED');
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
+
+    # 2. chat_messages: msg_type 컬럼 추가 
+    # (create_type=False 를 넣어서 SQLAlchemy가 또 만들려고 하는 걸 막음!)
     op.add_column(
         'chat_messages',
         sa.Column(
             'msg_type',
-            sa.Enum('NORMAL', 'SYSTEM', 'SCHEDULE_PROPOSE', 'CANCEL_REQUEST', name='chat_msg_type_enum'),
+            postgresql.ENUM('NORMAL', 'SYSTEM', 'SCHEDULE_PROPOSE', 'CANCEL_REQUEST', name='chat_msg_type_enum', create_type=False),
             nullable=False,
             server_default='NORMAL',
         )
     )
 
-    # meeting_schedules: 미팅 일정 확정 테이블
+    # 3. meeting_schedules: 미팅 일정 확정 테이블
     op.create_table(
         'meeting_schedules',
         sa.Column('id', sa.Integer(), nullable=False),
@@ -38,7 +49,7 @@ def upgrade() -> None:
         sa.Column('note', sa.Text(), nullable=True),
         sa.Column(
             'status',
-            sa.Enum('PROPOSED', 'CONFIRMED', 'CANCELLED', name='schedule_status_enum'),
+            postgresql.ENUM('PROPOSED', 'CONFIRMED', 'CANCELLED', name='schedule_status_enum', create_type=False),
             nullable=False,
             server_default='PROPOSED',
         ),

@@ -100,6 +100,14 @@ export default function MenuPage() {
   const [chatRooms, setChatRooms] = useState<{ room_id: number; meeting_id: number }[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
 
+  // ✅ 추가된 부분: 유저가 없으면 로그인 페이지로 보내는 로직을 useEffect 안으로 이동
+  useEffect(() => {
+    if (!loading && !user) {
+      router.replace("/login");
+    }
+  }, [user, loading, router]);
+
+  // 기존 데이터 패칭 useEffect
   useEffect(() => {
     if (!user) return;
     (async () => {
@@ -124,11 +132,12 @@ export default function MenuPage() {
     );
   }
 
+  // ✅ 수정된 부분: 여기서 직접 router.replace를 하지 않고 null만 반환합니다.
   if (!user) {
-    router.replace("/login");
     return null;
   }
 
+  // --- 이 아래(const balanceLabel = ...)부터는 기존 코드와 완전히 동일하게 두시면 됩니다! ---
   const balanceLabel = `${(user.balance ?? 0).toLocaleString()}원`;
   const activeMeetings = myMeetings.filter(
     (m) => m.status !== "CANCELLED"

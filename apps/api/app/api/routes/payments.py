@@ -39,7 +39,8 @@ from app.models.meeting_slot import MeetingSlot
 from app.models.user import User
 from app.services.notification import notify
 from app.models.notification import Notification, NotiType
-
+from app.models.wallet_transaction import WalletTransaction, TxType
+ 
 router = APIRouter()
 
 # slowapi rate limiter (설치된 경우 적용, 없으면 noop 데코레이터 사용)
@@ -384,7 +385,7 @@ def confirm_payment(
                         user_id=target_user.id,
                         amount=DEPOSIT_REFUND_AMOUNT,
                         balance_after=target_user.balance,
-                        tx_type=WalletTxType.DEPOSIT_REFUND,
+                        tx_type=TxType.DEPOSIT_REFUND,
                         meeting_id=meeting.id,
                         note=f"미팅 #{meeting.id} 확정 — 보증금 환불 (수수료 1,000원 차감)",
                     ))
