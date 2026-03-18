@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -13,9 +14,23 @@ from app.core.deps import get_db
 from app.models.user import User
 from app.schemas.auth import RegisterRequest, LoginRequest, TokenResponse, RefreshRequest
 from app.services.phone import normalize_phone_kr_to_e164, phone_hmac_hash, phone_last4
+from app.core.crypto import encrypt_phone
 
 router = APIRouter()
 
+
+# ─── Schemas ─────────────────────────────────────────────────────
+
+class FindEmailRequest(BaseModel):
+    phone: str
+
+
+class ResetPasswordRequest(BaseModel):
+    phone: str
+    new_password: str
+
+
+# ─── Routes ──────────────────────────────────────────────────────
 
 @router.post("/register", response_model=TokenResponse)
 def register(payload: RegisterRequest, db: Session = Depends(get_db)):
@@ -38,7 +53,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         password_hash=hash_password(payload.password),
         phone_hash=phash,
         phone_last4=phone_last4(e164),
-        phone_e164=e164,           # 알림 발송용 원문 번호 저장
+        phone_e164=encrypt_phone(e164),  # 알림 발송용 — 암호화 저장
         phone_verified=False,
         is_admin=(email in settings.admin_email_set()),
     )
@@ -87,3 +102,48 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
         access_token=create_access_token(user.id),
         refresh_token=create_refresh_token(user.id),
     )
+
+
+@router.post("/find-email")
+def find_email(payload: FindEmailRequest, db: Session = Depends(get_db)):
+    """전화번호로 가입 이메일(아이디) 찾기 — MVP: 번호 일치 확인만"""
+    try:
+        e164 = normalize_phone_kr_to_e164(payload.phone)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    phash = phone_hmac_hash(e164)
+    user = db.query(User).filter(User.phone_hash == phash).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="해당 전화번호로 가입된 계정을 찾을 수 없습니다.")
+
+    # 이메일 마스킹: 앞 2자리만 공개  ex) ab***@univ.ac.kr
+    local, domain = user.email.split("@", 1)
+    visible = local[:2] if len(local) >= 2 else local
+    masked_email = f"{visible}{'*' * max(3, len(local) - 2)}@{domain}"
+
+    return {"masked_email": masked_email}
+
+
+@router.post("/reset-password")
+def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
+    """전화번호 확인 후 비밀번호 재설정 — MVP: 번호 일치 확인만"""
+    try:
+        e164 = normalize_phone_kr_to_e164(payload.phone)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    phash = phone_hmac_hash(e164)
+    user = db.query(User).filter(User.phone_hash == phash).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="해당 전화번호로 가입된 계정을 찾을 수 없습니다.")
+
+    import re
+    if len(payload.new_password) < 8:
+        raise HTTPException(status_code=400, detail="비밀번호는 8자 이상이어야 합니다.")
+    if not re.search(r"[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?`~]", payload.new_password):
+        raise HTTPException(status_code=400, detail="비밀번호에 특수문자를 1자 이상 포함해야 합니다.")
+
+    user.password_hash = hash_password(payload.new_password)
+    db.commit()
+    return {"status": "ok"}

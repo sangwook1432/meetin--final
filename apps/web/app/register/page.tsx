@@ -35,6 +35,10 @@ export default function RegisterPage() {
       setError("비밀번호는 8자 이상이어야 합니다");
       return;
     }
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(form.password)) {
+      setError("비밀번호에 특수문자를 1자 이상 포함해야 합니다");
+      return;
+    }
 
     setLoading(true);
     try {
@@ -87,12 +91,12 @@ export default function RegisterPage() {
             />
           </Field>
 
-          <Field label="비밀번호" hint="8자 이상">
+          <Field label="비밀번호" hint="8자 이상, 특수문자 포함">
             <input
               type="password"
               value={form.password}
               onChange={set("password")}
-              placeholder="비밀번호 (8자 이상)"
+              placeholder="비밀번호 (8자 이상, 특수문자 포함)"
               required
               className={inputCls}
             />
@@ -143,7 +147,7 @@ export default function RegisterPage() {
 // ─── 공통 인풋 스타일 ────────────────────────────────────
 
 const inputCls =
-  "w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all";
+  "w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all";
 
 function Field({
   label,
