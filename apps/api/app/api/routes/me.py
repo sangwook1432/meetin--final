@@ -11,7 +11,7 @@ from app.schemas.verification import DocUploadRequest, VerificationDocOut
 
 router = APIRouter()
 
-UPLOAD_DIR = "/tmp/uploads"
+UPLOAD_DIR = "/app/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
@@ -34,6 +34,42 @@ def update_profile(
     db.commit()
     db.refresh(user)
     return user
+
+
+@router.post("/me/photos/upload")
+async def upload_photo(
+    slot: int = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """프로필 사진 업로드. slot=1 또는 2."""
+    if slot not in (1, 2):
+        raise HTTPException(400, "slot은 1 또는 2여야 합니다.")
+
+    filename = file.filename or ""
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext not in ("jpg", "jpeg", "png"):
+        raise HTTPException(400, "JPG, PNG 파일만 업로드 가능합니다.")
+
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(400, "파일 크기는 5MB를 초과할 수 없습니다.")
+
+    save_name = f"photo_{user.id}_{slot}_{uuid.uuid4().hex[:8]}.{ext}"
+    save_path = os.path.join(UPLOAD_DIR, save_name)
+    with open(save_path, "wb") as f_out:
+        f_out.write(content)
+
+    photo_url = f"/uploads/{save_name}"
+    if slot == 1:
+        user.photo_url_1 = photo_url
+    else:
+        user.photo_url_2 = photo_url
+    db.add(user)
+    db.commit()
+
+    return {"photo_url": photo_url}
 
 
 @router.post("/me/docs", response_model=VerificationDocOut)

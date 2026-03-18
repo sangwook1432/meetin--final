@@ -13,6 +13,8 @@ import type {
   ConfirmResponse,
   MeetingType,
   UserPublic,
+  AfterTarget,
+  AfterRequestItem,
 } from "@/types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -135,6 +137,37 @@ export async function loginApi(email: string, password: string): Promise<TokenRe
   return res.json();
 }
 
+/** POST /auth/find-email — 전화번호로 가입 이메일 찾기 */
+export async function findEmailByPhone(phone: string): Promise<{ masked_email: string }> {
+  const res = await fetch(`${BASE}/auth/find-email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ phone }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.detail ?? "이메일 찾기 실패");
+  }
+  return res.json();
+}
+
+/** POST /auth/reset-password — 전화번호 확인 후 비밀번호 재설정 */
+export async function resetPasswordByPhone(
+  phone: string,
+  newPassword: string
+): Promise<{ status: string }> {
+  const res = await fetch(`${BASE}/auth/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ phone, new_password: newPassword }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.detail ?? "비밀번호 재설정 실패");
+  }
+  return res.json();
+}
+
 /** POST /auth/register */
 export async function registerApi(payload: {
   email: string;
@@ -181,6 +214,26 @@ export async function updateProfile(payload: Partial<{
   });
 }
 
+export async function uploadPhoto(
+  slot: 1 | 2,
+  file: File
+): Promise<{ photo_url: string }> {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("slot", String(slot));
+  formData.append("file", file);
+  const res = await fetch(`${BASE}/me/photos/upload`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.error?.detail ?? "사진 업로드 실패");
+  }
+  return res.json();
+}
+
 export async function uploadDoc(payload: {
   doc_type: "ENROLLMENT_CERT" | "STUDENT_ID";
   file_url: string;
@@ -194,6 +247,20 @@ export async function uploadDoc(payload: {
 // ─────────────────────────────────────────
 // Meetings
 // ─────────────────────────────────────────
+
+export interface MyMeetingItem {
+  meeting_id: number;
+  meeting_type: string;
+  title: string | null;
+  status: string;
+  host_user_id: number;
+  is_host: boolean;
+  chat_room_id: number | null;
+}
+
+export async function getMyMeetings(): Promise<{ meetings: MyMeetingItem[] }> {
+  return apiFetch("/meetings/me");
+}
 
 export async function discoverMeetings(): Promise<{ meetings: MeetingListItem[] }> {
   return apiFetch("/meetings/discover");
@@ -209,15 +276,31 @@ export async function getMeeting(id: number): Promise<MeetingDetail> {
 
 export async function createMeeting(params: {
   meeting_type: MeetingType;
+  title?: string;
   preferred_universities_any?: boolean;
   preferred_universities_raw?: string;
+  entry_year_min?: number;
+  entry_year_max?: number;
+  my_team_universities_any?: boolean;
+  my_team_universities_raw?: string;
+  my_team_entry_year_min?: number;
+  my_team_entry_year_max?: number;
 }): Promise<{ meeting_id: number; meeting_status: string }> {
   const qs = new URLSearchParams({
     meeting_type: params.meeting_type,
+    ...(params.title ? { title: params.title } : {}),
     preferred_universities_any: String(params.preferred_universities_any ?? true),
     ...(params.preferred_universities_raw
       ? { preferred_universities_raw: params.preferred_universities_raw }
       : {}),
+    ...(params.entry_year_min != null ? { entry_year_min: String(params.entry_year_min) } : {}),
+    ...(params.entry_year_max != null ? { entry_year_max: String(params.entry_year_max) } : {}),
+    my_team_universities_any: String(params.my_team_universities_any ?? true),
+    ...(params.my_team_universities_raw
+      ? { my_team_universities_raw: params.my_team_universities_raw }
+      : {}),
+    ...(params.my_team_entry_year_min != null ? { my_team_entry_year_min: String(params.my_team_entry_year_min) } : {}),
+    ...(params.my_team_entry_year_max != null ? { my_team_entry_year_max: String(params.my_team_entry_year_max) } : {}),
   });
   return apiFetch(`/meetings?${qs}`, { method: "POST" });
 }
@@ -236,6 +319,29 @@ export async function leaveMeeting(id: number) {
 
 export async function confirmMeeting(id: number): Promise<ConfirmResponse> {
   return apiFetch(`/meetings/${id}/confirm`, { method: "POST" });
+}
+
+export async function updateEntryYearRange(
+  meetingId: number,
+  entryYearMin: number | null,
+  entryYearMax: number | null
+): Promise<{ meeting_id: number; entry_year_min: number | null; entry_year_max: number | null }> {
+  const qs = new URLSearchParams();
+  if (entryYearMin != null) qs.set("entry_year_min", String(entryYearMin));
+  if (entryYearMax != null) qs.set("entry_year_max", String(entryYearMax));
+  return apiFetch(`/meetings/${meetingId}/entry-year-range?${qs}`, { method: "PATCH" });
+}
+
+export async function updatePreferredUniversities(
+  meetingId: number,
+  preferredUniversitiesAny: boolean,
+  preferredUniversitiesRaw?: string
+): Promise<{ meeting_id: number; preferred_universities_any: boolean; preferred_universities_raw: string | null }> {
+  const qs = new URLSearchParams({
+    preferred_universities_any: String(preferredUniversitiesAny),
+    ...(preferredUniversitiesRaw ? { preferred_universities_raw: preferredUniversitiesRaw } : {}),
+  });
+  return apiFetch(`/meetings/${meetingId}/preferred-universities?${qs}`, { method: "PATCH" });
 }
 
 // ─────────────────────────────────────────
@@ -259,63 +365,63 @@ export async function sendMessage(roomId: number, content: string) {
   });
 }
 
-// ─────────────────────────────────────────
-// Payments (Toss)
-// ─────────────────────────────────────────
-
-/** POST /payments/deposits/prepare — Toss 위젯 결제 전 주문 생성 */
-export async function prepareDeposit(meetingId: number): Promise<{
-  orderId: string;
-  amount: number;
-  orderName: string;
-}> {
-  return apiFetch(`/payments/deposits/prepare?meeting_id=${meetingId}`, {
+/** POST /chats/{roomId}/read — WS 수신 후 읽음 기록 갱신 */
+export async function markRead(roomId: number, messageId: number): Promise<{ status: string }> {
+  return apiFetch(`/chats/${roomId}/read`, {
     method: "POST",
+    body: JSON.stringify({ message_id: messageId }),
   });
 }
 
-/** POST /payments/toss/confirm — Toss 결제 성공 콜백 후 서버 검증 */
-export async function confirmTossPayment(params: {
-  order_id: string;
-  payment_key?: string;
-}): Promise<{
-  status: "confirmed" | "already_confirmed";
-  meeting_id: number;
-  meeting_status: string;
-  chat_room_id: number | null;
-}> {
-  const qs = new URLSearchParams({ order_id: params.order_id });
-  if (params.payment_key) qs.set("payment_key", params.payment_key);
-  return apiFetch(`/payments/toss/confirm?${qs}`, { method: "POST" });
+// ─────────────────────────────────────────
+// Tickets (매칭권)
+// ─────────────────────────────────────────
+
+export interface TicketTx {
+  id: number;
+  tx_type: "PURCHASE" | "CONSUME" | "REFUND";
+  amount: number;
+  tickets_after: number;
+  meeting_id: number | null;
+  note: string | null;
+  created_at: string;
 }
 
-/** GET /payments/deposits/me — 내 보증금 목록 */
-export async function getMyDeposits(meetingId?: number): Promise<{
-  deposits: {
-    id: number;
-    meeting_id: number;
-    amount: number;
-    status: string;
-    toss_order_id: string;
-    created_at: string;
-  }[];
+/** GET /tickets/me — 매칭권 수 + 이력 */
+export async function getMyTickets(): Promise<{ tickets: number; transactions: TicketTx[] }> {
+  return apiFetch("/tickets/me");
+}
+
+/** POST /tickets/purchase?count=N — 매칭권 구매 */
+export async function purchaseTickets(count: number): Promise<{
+  tickets: number;
+  balance: number;
+  purchased: number;
 }> {
-  const qs = meetingId !== undefined ? `?meeting_id=${meetingId}` : "";
-  return apiFetch(`/payments/deposits/me${qs}`);
+  return apiFetch(`/tickets/purchase?count=${count}`, { method: "POST" });
 }
 
 // ─────────────────────────────────────────
 // Chat Room
 // ─────────────────────────────────────────
 
-/** GET /chats/{roomId}/info — 채팅방 메타 정보 (host_user_id 등) */
-export async function getChatRoomInfo(roomId: number): Promise<{
+export interface ChatRoomInfo {
   room_id: number;
   meeting_id: number;
+  meeting_title: string | null;
   host_user_id: number;
   meeting_type: string;
+  total_members: number;
+  is_closed: boolean;
   schedule: { date: string; time: string; place: string; confirmed: boolean } | null;
-}> {
+  cancel_vote_count: number;
+  my_cancel_voted: boolean;
+  schedule_vote_count: number;
+  my_schedule_voted: boolean;
+}
+
+/** GET /chats/{roomId}/info — 채팅방 메타 정보 (host_user_id, 투표 현황 등) */
+export async function getChatRoomInfo(roomId: number): Promise<ChatRoomInfo> {
   return apiFetch(`/chats/${roomId}/info`);
 }
 
@@ -323,11 +429,11 @@ export async function getChatRoomInfo(roomId: number): Promise<{
 export async function leaveChatRoom(
   roomId: number,
   leaveType: "forfeit" | "replace",
-  replacePhone?: string
-): Promise<{ status: string; message?: string; meeting_status?: string }> {
+  replaceUserId?: number
+): Promise<{ status: string; message?: string; meeting_status?: string; remaining_attempts?: number }> {
   return apiFetch(`/chats/${roomId}/leave`, {
     method: "POST",
-    body: JSON.stringify({ leave_type: leaveType, replace_phone: replacePhone ?? null }),
+    body: JSON.stringify({ leave_type: leaveType, replace_user_id: replaceUserId ?? null }),
   });
 }
 
@@ -340,6 +446,57 @@ export async function setMeetingSchedule(
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+/** POST /chats/{roomId}/cancel/withdraw — 취소 투표 철회 */
+export async function withdrawCancelVote(roomId: number): Promise<{
+  status: string; vote_count: number; total_members: number;
+}> {
+  return apiFetch(`/chats/${roomId}/cancel/withdraw`, { method: "POST" });
+}
+
+/** POST /chats/{roomId}/cancel/disagree — 취소 투표 비동의 (투표 무효화) */
+export async function disagreeToCancelMeeting(roomId: number): Promise<{ status: string }> {
+  return apiFetch(`/chats/${roomId}/cancel/disagree`, { method: "POST" });
+}
+
+/** POST /chats/{roomId}/schedule/withdraw — 일정 투표 철회 */
+export async function withdrawScheduleVote(roomId: number): Promise<{
+  status: string; vote_count: number; total_members: number;
+}> {
+  return apiFetch(`/chats/${roomId}/schedule/withdraw`, { method: "POST" });
+}
+
+/** POST /chats/{roomId}/schedule/disagree — 일정 투표 비동의 (투표 무효화) */
+export async function disagreeToSchedule(roomId: number): Promise<{ status: string }> {
+  return apiFetch(`/chats/${roomId}/schedule/disagree`, { method: "POST" });
+}
+
+/** POST /chats/{roomId}/cancel/propose — 취소 투표 시작 */
+export async function proposeCancelMeeting(roomId: number): Promise<{
+  status: string;
+  vote_count: number;
+  total_members: number;
+}> {
+  return apiFetch(`/chats/${roomId}/cancel/propose`, { method: "POST" });
+}
+
+/** POST /chats/{roomId}/cancel/agree — 취소 투표 동의 */
+export async function agreeToCancelMeeting(roomId: number): Promise<{
+  status: string;
+  vote_count: number;
+  total_members: number;
+}> {
+  return apiFetch(`/chats/${roomId}/cancel/agree`, { method: "POST" });
+}
+
+/** POST /chats/{roomId}/schedule/agree — 일정 투표 동의 */
+export async function agreeToSchedule(roomId: number): Promise<{
+  status: string;
+  vote_count: number;
+  total_members: number;
+}> {
+  return apiFetch(`/chats/${roomId}/schedule/agree`, { method: "POST" });
 }
 
 /** GET /meetings/{meetingId}/schedule — 미팅 일정 조회 */
@@ -357,6 +514,7 @@ export async function getMySchedules(): Promise<{
   schedules: {
     meeting_id: number;
     meeting_type: string;
+    title: string | null;
     chat_room_id: number | null;
     schedule: { date: string | null; time: string | null; place: string | null; confirmed: boolean };
   }[];
@@ -422,12 +580,24 @@ export async function inviteFriendToMeeting(
   });
 }
 
+/** POST /invitations/meeting-by-id — 친구를 미팅에 초대 (user ID 기반) */
+export async function inviteFriendToMeetingById(
+  meetingId: number,
+  inviteeId: number
+): Promise<{ status: string; invitation_id?: number }> {
+  return apiFetch("/invitations/meeting-by-id", {
+    method: "POST",
+    body: JSON.stringify({ meeting_id: meetingId, invitee_id: inviteeId }),
+  });
+}
+
 /** GET /invitations/me — 내가 받은 초대 목록 */
 export async function getMyInvitations(): Promise<{
   invitations: {
     id: number;
     meeting_id: number;
     invite_type: string;
+    status: string;
     inviter_nickname: string | null;
     expires_at: string;
     created_at: string;
@@ -440,11 +610,20 @@ export async function getMyInvitations(): Promise<{
 export async function respondToInvitation(
   invitationId: number,
   accept: boolean
-): Promise<{ status: string; meeting_id?: number }> {
+): Promise<{ status: string; meeting_id?: number; invitation_id?: number; message?: string }> {
   return apiFetch(`/invitations/${invitationId}/respond`, {
     method: "POST",
     body: JSON.stringify({ accept }),
   });
+}
+
+/** POST /invitations/{id}/replace_confirm — 대체 참가 보증금 결제 + 슬롯 교체 */
+export async function replaceConfirm(invitationId: number): Promise<{
+  status: string;
+  meeting_id: number;
+  chat_room_id: number | null;
+}> {
+  return apiFetch(`/invitations/${invitationId}/replace_confirm`, { method: "POST" });
 }
 
 // ─────────────────────────────────────────
@@ -454,7 +633,7 @@ export async function respondToInvitation(
 /** GET /wallet/me — 잔액 조회 */
 export async function getWallet(): Promise<{
   balance: number;
-  deposit_amount: number;
+  matching_tickets: number;
   can_afford: boolean;
 }> {
   return apiFetch("/wallet/me");
@@ -481,6 +660,38 @@ export async function confirmCharge(payload: {
   });
 }
 
+/** GET /me/bank-account — 계좌 조회 */
+export async function getBankAccount(): Promise<{
+  bank_name: string | null;
+  account_number: string | null;
+  account_holder: string | null;
+}> {
+  return apiFetch("/me/bank-account");
+}
+
+/** PATCH /me/bank-account — 계좌 등록/수정 */
+export async function updateBankAccount(payload: {
+  bank_name: string;
+  account_number: string;
+  account_holder: string;
+}): Promise<{ status: string }> {
+  return apiFetch("/me/bank-account", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** POST /wallet/withdraw — 출금 신청 */
+export async function requestWithdraw(amount: number): Promise<{
+  status: string;
+  balance: number;
+}> {
+  return apiFetch("/wallet/withdraw", {
+    method: "POST",
+    body: JSON.stringify({ amount }),
+  });
+}
+
 /** GET /wallet/transactions — 거래 내역 */
 export async function getWalletTransactions(limit = 50, offset = 0): Promise<{
   balance: number;
@@ -489,8 +700,8 @@ export async function getWalletTransactions(limit = 50, offset = 0): Promise<{
     tx_type: string;
     amount: number;
     balance_after: number;
-    description: string | null;
-    ref_meeting_id: number | null;
+    note: string | null;
+    meeting_id: number | null;
     created_at: string;
   }[];
 }> {
@@ -500,6 +711,70 @@ export async function getWalletTransactions(limit = 50, offset = 0): Promise<{
 // ─────────────────────────────────────────
 // File Upload (재학증명서 JPG)
 // ─────────────────────────────────────────
+
+// ─────────────────────────────────────────
+// Notifications (시스템 알림)
+// ─────────────────────────────────────────
+
+/** GET /notifications/me — 안 읽은 알림 목록 */
+export async function getMyNotifications(): Promise<{
+  notifications: {
+    id: number;
+    notif_type: string;
+    message: string;
+    meeting_id: number | null;
+    created_at: string;
+  }[];
+}> {
+  return apiFetch("/notifications/me");
+}
+
+/** POST /notifications/{id}/read — 알림 읽음 처리 */
+export async function markNotificationRead(id: number): Promise<{ status: string }> {
+  return apiFetch(`/notifications/${id}/read`, { method: "POST" });
+}
+
+// ─────────────────────────────────────────
+// File Upload (재학증명서 JPG)
+// ─────────────────────────────────────────
+
+// ─────────────────────────────────────────
+// Review & After Requests (미팅 후기 & 애프터)
+// ─────────────────────────────────────────
+
+/** POST /meetings/{id}/feedback — 후기 제출 */
+export async function submitFeedback(
+  meetingId: number,
+  satisfied: boolean,
+  complaint?: string
+): Promise<{ status: string }> {
+  const qs = new URLSearchParams({ satisfied: String(satisfied) });
+  if (!satisfied && complaint) qs.set("complaint", complaint);
+  return apiFetch(`/meetings/${meetingId}/feedback?${qs}`, { method: "POST" });
+}
+
+/** GET /meetings/{id}/after-targets — 상대 이성 프로필 목록 */
+export async function getAfterTargets(meetingId: number): Promise<{ targets: AfterTarget[] }> {
+  return apiFetch(`/meetings/${meetingId}/after-targets`);
+}
+
+/** POST /meetings/{id}/after-request — 애프터 신청 */
+export async function submitAfterRequest(
+  meetingId: number,
+  receiverId: number,
+  message: string,
+  senderPhone: string
+): Promise<{ status: string }> {
+  return apiFetch(`/meetings/${meetingId}/after-request`, {
+    method: "POST",
+    body: JSON.stringify({ receiver_id: receiverId, message, sender_phone: senderPhone }),
+  });
+}
+
+/** GET /me/after-requests — 쪽지함 (수신된 애프터 신청 목록) */
+export async function getMyAfterRequests(): Promise<{ items: AfterRequestItem[] }> {
+  return apiFetch("/me/after-requests");
+}
 
 /** POST /me/docs/upload — JPG 파일 업로드 */
 export async function uploadDocFile(

@@ -17,7 +17,7 @@
 import { useState, useEffect, FormEvent, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { updateProfile } from "@/lib/api";
+import { updateProfile, uploadPhoto } from "@/lib/api";
 import { AppShell } from "@/components/ui/AppShell";
 import type { Gender, LookalikeType } from "@/types";
 
@@ -62,9 +62,33 @@ function ProfileInner() {
     lookalike_type: "" as LookalikeType | "",
     lookalike_value: "",
   });
+  const [photos, setPhotos] = useState<{ 1: string | null; 2: string | null }>({ 1: null, 2: null });
+  const [photoUploading, setPhotoUploading] = useState<{ 1: boolean; 2: boolean }>({ 1: false, 2: false });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  // 기존 사진 초기화
+  useEffect(() => {
+    if (!user) return;
+    setPhotos({ 1: user.photo_url_1 ?? null, 2: user.photo_url_2 ?? null });
+  }, [user]);
+
+  const handlePhotoChange = async (slot: 1 | 2, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoUploading((prev) => ({ ...prev, [slot]: true }));
+    setError(null);
+    try {
+      const { photo_url } = await uploadPhoto(slot, file);
+      setPhotos((prev) => ({ ...prev, [slot]: photo_url }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "사진 업로드 실패");
+    } finally {
+      setPhotoUploading((prev) => ({ ...prev, [slot]: false }));
+      e.target.value = "";
+    }
+  };
 
   // 기존 프로필로 폼 초기화
   useEffect(() => {
@@ -152,6 +176,47 @@ function ProfileInner() {
         <h2 className="mb-5 text-lg font-bold text-gray-900">내 프로필</h2>
 
         <form onSubmit={handleSubmit} className="space-y-5">
+          {/* 프로필 사진 */}
+          <section className="rounded-2xl bg-white border border-gray-100 p-4 shadow-sm">
+            <SectionTitle>프로필 사진</SectionTitle>
+            <p className="mt-1 mb-3 text-xs text-gray-400">JPG, PNG / 최대 5MB / 첫 번째 사진이 대표 사진입니다</p>
+            <div className="flex gap-3">
+              {([1, 2] as const).map((slot) => {
+                const photoUrl = photos[slot];
+                const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+                const src = photoUrl ? (photoUrl.startsWith("http") ? photoUrl : `${apiBase}${photoUrl}`) : null;
+                return (
+                  <label key={slot} className="relative flex-1 cursor-pointer">
+                    <div className={`flex h-28 w-full flex-col items-center justify-center rounded-xl border-2 border-dashed transition-all overflow-hidden ${src ? "border-transparent" : "border-gray-200 hover:border-blue-400"}`}>
+                      {photoUploading[slot] ? (
+                        <span className="text-xs text-gray-400">업로드 중...</span>
+                      ) : src ? (
+                        <>
+                          <img src={src} alt={`사진 ${slot}`} className="h-full w-full object-cover" />
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 hover:opacity-100 transition-opacity rounded-xl">
+                            <span className="text-xs text-white font-medium">변경</span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-2xl text-gray-300">+</span>
+                          <span className="mt-1 text-xs text-gray-400">사진 {slot}</span>
+                        </>
+                      )}
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png"
+                      className="hidden"
+                      onChange={(e) => handlePhotoChange(slot, e)}
+                      disabled={photoUploading[slot]}
+                    />
+                  </label>
+                );
+              })}
+            </div>
+          </section>
+
           {/* 성별 — 필수 */}
           <section className="rounded-2xl bg-white border border-gray-100 p-4 shadow-sm">
             <SectionTitle required>성별</SectionTitle>
@@ -278,7 +343,7 @@ function ProfileInner() {
 
 // ─── 공통 컴포넌트 ────────────────────────────────────────
 
-const inputCls = "w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all";
+const inputCls = "w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 outline-none focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all";
 
 function SectionTitle({ children, required }: { children: React.ReactNode; required?: boolean }) {
   return (

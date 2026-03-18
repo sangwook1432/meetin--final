@@ -1,9 +1,12 @@
 from contextlib import asynccontextmanager
 
+import os
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.config import settings
@@ -63,32 +66,34 @@ for handler in logging.root.handlers:
     handler.setFormatter(JsonFormatter())
 
 
-# ─── APScheduler 환불 배치 Lifespan ──────────────────────────────
+# ─── Lifespan: Redis + Scheduler ─────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    앱 시작/종료 시 스케줄러를 시작/중단.
+    # 1. Redis 연결 (REDIS_URL 없으면 no-op)
+    from app.core.redis import init_redis, close_redis
+    await init_redis()
 
-    - 시작: REFUND_PENDING 배치 잡 (5분 주기)
-    - 종료: 스케줄러 graceful shutdown
-    """
+    # 2. 스케줄러 시작
     try:
         from app.services.scheduler import start_scheduler
         start_scheduler()
-        logger.info("[APP] Scheduler started (refund batch every 5 min)")
+        logger.info("[APP] Scheduler started")
     except ImportError:
-        logger.warning("[APP] APScheduler not installed — refund batch disabled. Run: pip install apscheduler")
+        logger.warning("[APP] APScheduler not installed — scheduler disabled")
     except Exception as e:
         logger.error("[APP] Failed to start scheduler: %s", e, exc_info=True)
 
     yield  # 앱 실행
 
+    # 종료: 스케줄러 → Redis 순서로 정리
     try:
         from app.services.scheduler import stop_scheduler
         stop_scheduler()
         logger.info("[APP] Scheduler stopped")
     except Exception:
         pass
+
+    await close_redis()
 
 
 # ─── FastAPI 앱 ────────────────────────────────────────────────────
@@ -212,6 +217,11 @@ async def logging_middleware(request: Request, call_next):
 
 
 app.include_router(router)
+
+# ─── 업로드 파일 정적 서빙 ────────────────────────────────────────
+_upload_dir = "/app/uploads"
+os.makedirs(_upload_dir, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=_upload_dir), name="uploads")
 
 
 @app.get("/health")
