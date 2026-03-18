@@ -14,12 +14,25 @@ import type { MeetingSlot } from "@/types";
 interface SlotCardProps {
   slot: MeetingSlot;
   index: number;  // 화면 표시용 1-based 번호
+  isHost?: boolean;
+  onInviteClick?: () => void;
 }
 
-export function SlotCard({ slot, index }: SlotCardProps) {
+export function SlotCard({ slot, index, isHost = false, onInviteClick }: SlotCardProps) {
   const isEmpty = slot.user === null;
 
   if (isEmpty) {
+    if (onInviteClick) {
+      return (
+        <button
+          onClick={onInviteClick}
+          className="flex w-full items-center gap-3 rounded-xl border-2 border-dashed border-blue-300 bg-blue-50 p-4 text-blue-500 hover:border-blue-400 hover:bg-blue-100 active:scale-95 transition-all"
+        >
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-lg font-bold text-blue-500">+</div>
+          <span className="text-sm font-semibold">친구 초대</span>
+        </button>
+      );
+    }
     return (
       <div className="flex items-center gap-3 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 p-4 text-gray-400">
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-200 text-sm font-semibold text-gray-500">
@@ -46,7 +59,7 @@ export function SlotCard({ slot, index }: SlotCardProps) {
       <div className="relative flex-shrink-0">
         {user.photo_url_1 ? (
           <img
-            src={user.photo_url_1}
+            src={user.photo_url_1.startsWith("http") ? user.photo_url_1 : `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}${user.photo_url_1}`}
             alt="profile"
             className="h-10 w-10 rounded-full object-cover"
           />
@@ -65,6 +78,11 @@ export function SlotCard({ slot, index }: SlotCardProps) {
           </span>
           {user.entry_label && (
             <span className="text-xs text-gray-500">{user.entry_label}</span>
+          )}
+          {isHost && (
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-700">
+              👑 HOST
+            </span>
           )}
         </div>
         <div className="text-xs text-gray-500">
