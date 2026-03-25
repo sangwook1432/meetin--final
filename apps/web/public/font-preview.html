@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>폰트 미리보기</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;900&family=IBM+Plex+Sans+KR:wght@400;600;700&family=Nanum+Gothic:wght@400;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.cdnfonts.com/css/pretendard" rel="stylesheet" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #f5f5f5; padding: 40px 20px; }
+
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; max-width: 900px; margin: 0 auto; }
+
+    .card {
+      background: white;
+      border-radius: 20px;
+      padding: 28px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+      border: 1px solid #e8e8e8;
+    }
+    .tag {
+      display: inline-block;
+      background: #eff6ff;
+      color: #2563eb;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 999px;
+      margin-bottom: 16px;
+      font-family: monospace;
+    }
+    .title { font-size: 26px; font-weight: 900; color: #111; margin-bottom: 6px; }
+    .sub { font-size: 14px; font-weight: 600; color: #555; margin-bottom: 14px; }
+    .body { font-size: 13px; color: #444; line-height: 1.7; margin-bottom: 16px; }
+    .input-mock {
+      border: 1.5px solid #d1d5db;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: #111;
+      margin-bottom: 8px;
+    }
+    .btn {
+      background: #2563eb;
+      color: white;
+      border-radius: 10px;
+      padding: 10px 0;
+      font-size: 13px;
+      font-weight: 700;
+      text-align: center;
+      margin-top: 4px;
+    }
+    .vibe { font-size: 11px; color: #888; margin-top: 12px; }
+
+    .noto   { font-family: 'Noto Sans KR', sans-serif; }
+    .pret   { font-family: 'Pretendard', sans-serif; }
+    .ibm    { font-family: 'IBM Plex Sans KR', sans-serif; }
+    .nanum  { font-family: 'Nanum Gothic', sans-serif; }
+  </style>
+</head>
+<body>
+  <div class="grid">
+
+    <!-- Noto Sans KR -->
+    <div class="card noto">
+      <span class="tag">Noto Sans KR</span>
+      <div class="title">MEETIN.</div>
+      <div class="sub">대학생 팀 미팅 플랫폼</div>
+      <div class="body">성별과 학교 정보를 입력해야 미팅에 참가할 수 있습니다. 재학증명서 업로드 후 인증이 완료됩니다.</div>
+      <div class="input-mock">홍길동</div>
+      <div class="input-mock">서울대학교</div>
+      <div class="btn">저장하고 다음 단계로 →</div>
+      <div class="vibe">깔끔하고 무난함 · 가장 넓은 호환성</div>
+    </div>
+
+    <!-- Pretendard -->
+    <div class="card pret">
+      <span class="tag">Pretendard</span>
+      <div class="title">MEETIN.</div>
+      <div class="sub">대학생 팀 미팅 플랫폼</div>
+      <div class="body">성별과 학교 정보를 입력해야 미팅에 참가할 수 있습니다. 재학증명서 업로드 후 인증이 완료됩니다.</div>
+      <div class="input-mock">홍길동</div>
+      <div class="input-mock">서울대학교</div>
+      <div class="btn">저장하고 다음 단계로 →</div>
+      <div class="vibe">모던하고 세련됨 · 요즘 한국 앱 트렌드</div>
+    </div>
+
+    <!-- IBM Plex Sans KR -->
+    <div class="card ibm">
+      <span class="tag">IBM Plex Sans KR</span>
+      <div class="title">MEETIN.</div>
+      <div class="sub">대학생 팀 미팅 플랫폼</div>
+      <div class="body">성별과 학교 정보를 입력해야 미팅에 참가할 수 있습니다. 재학증명서 업로드 후 인증이 완료됩니다.</div>
+      <div class="input-mock">홍길동</div>
+      <div class="input-mock">서울대학교</div>
+      <div class="btn">저장하고 다음 단계로 →</div>
+      <div class="vibe">정갈하고 기술적인 느낌 · 약간 딱딱함</div>
+    </div>
+
+    <!-- Nanum Gothic -->
+    <div class="card nanum">
+      <span class="tag">Nanum Gothic</span>
+      <div class="title">MEETIN.</div>
+      <div class="sub">대학생 팀 미팅 플랫폼</div>
+      <div class="body">성별과 학교 정보를 입력해야 미팅에 참가할 수 있습니다. 재학증명서 업로드 후 인증이 완료됩니다.</div>
+      <div class="input-mock">홍길동</div>
+      <div class="input-mock">서울대학교</div>
+      <div class="btn">저장하고 다음 단계로 →</div>
+      <div class="vibe">부드럽고 친근함 · 약간 올드한 느낌</div>
+    </div>
+
+  </div>
+</body>
+</html>

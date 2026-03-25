@@ -10,7 +10,7 @@
 
   await notify.waiting_confirm(user, meeting_id)
   await notify.meeting_confirmed(user, meeting_id, chat_room_id)
-  await notify.deposit_refunded(user, meeting_id, amount)
+  await notify.ticket_refunded(user, meeting_id, amount)
 
 환경 변수:
   KAKAO_API_KEY   — 카카오 비즈메시지 REST API Key
@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import httpx
 from typing import TYPE_CHECKING
 
@@ -89,10 +90,18 @@ async def _send_alimtalk(
 
 def _get_phone(user: "User") -> str | None:
     """
-    User 모델에서 알림 발송용 전화번호 추출 (E.164 형식).
+    User 모델에서 알림 발송용 전화번호 추출.
+    Kakao 알림톡은 01012345678 형식 요구 → +82 제거 후 반환.
     phone_e164 가 없는 레거시 계정은 None 반환 → 알림 스킵.
     """
-    return getattr(user, "phone_e164", None)
+    from app.core.crypto import decrypt_phone
+    encrypted = getattr(user, "phone_e164", None)
+    if not encrypted:
+        return None
+    e164 = decrypt_phone(encrypted)
+    if not e164:
+        return None
+    return re.sub(r"^\+82", "0", e164)
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -147,10 +156,10 @@ class NotificationService:
         )
         logger.info("[NOTIFY] confirmed user=%d meeting=%d room=%d", user.id, meeting_id, chat_room_id)
 
-    async def deposit_refunded(
+    async def ticket_refunded(
         self, user: "User", meeting_id: int, amount: int
     ) -> None:
-        """보증금 환불 처리 완료 알림"""
+        """매칭권 환급 알림"""
         phone = _get_phone(user)
         if not phone:
             return
@@ -167,10 +176,10 @@ class NotificationService:
         )
         logger.info("[NOTIFY] refunded user=%d meeting=%d amount=%d", user.id, meeting_id, amount)
 
-    async def deposit_forfeited(
+    async def ticket_forfeited(
         self, user: "User", meeting_id: int, amount: int
     ) -> None:
-        """노쇼 → 보증금 몰수 알림"""
+        """노쇼 → 매칭권 몰수 알림"""
         phone = _get_phone(user)
         if not phone:
             return
@@ -186,30 +195,6 @@ class NotificationService:
             },
         )
         logger.info("[NOTIFY] forfeited user=%d meeting=%d amount=%d", user.id, meeting_id, amount)
-
-    async def replacement_requested(
-        self, candidate_user: "User", meeting_id: int, request_id: int
-    ) -> None:
-        """대타 요청 수신 알림 → candidate에게 발송"""
-        phone = _get_phone(candidate_user)
-        if not phone:
-            return
-
-        nickname = getattr(candidate_user, "nickname", None) or "회원"
-        await _send_alimtalk(
-            phone=phone,
-            template_code=getattr(settings, "kakao_template_replacement", "MEETIN_REPL"),
-            template_args={
-                "nickname": nickname,
-                "meeting_id": str(meeting_id),
-                "request_id": str(request_id),
-                "app_url": f"https://meetin.kr/meetings/{meeting_id}",
-            },
-        )
-        logger.info(
-            "[NOTIFY] replacement_requested candidate=%d meeting=%d req=%d",
-            candidate_user.id, meeting_id, request_id,
-        )
 
 
 # 싱글턴 인스턴스 — 어디서든 import 해서 바로 사용

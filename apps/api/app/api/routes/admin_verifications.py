@@ -5,6 +5,7 @@ from sqlalchemy import select, func
 from app.core.deps import get_db, require_admin
 from app.models.user import User, VerificationStatus
 from app.models.verification_doc import VerificationDoc, DocStatus
+from app.models.meeting_feedback import MeetingFeedback
 from app.schemas.verification import (
     AdminVerificationAction,
     AdminUserVerificationOut,
@@ -33,9 +34,12 @@ def list_verifications(
     q = (
         db.query(
             User.id.label("user_id"),
-            User.email,
+            User.username,
             User.nickname,
             User.university,
+            User.major,
+            User.entry_year,
+            User.age,
             User.verification_status,
             func.count(VerificationDoc.id).label("doc_count"),
         )
@@ -50,9 +54,12 @@ def list_verifications(
     return [
         AdminUserVerificationOut(
             user_id=r.user_id,
-            email=r.email,
+            username=r.username,
             nickname=getattr(r, "nickname", None),
             university=r.university,
+            major=r.major,
+            entry_year=r.entry_year,
+            age=r.age,
             verification_status=r.verification_status,
             doc_count=int(r.doc_count or 0),
         )
@@ -147,6 +154,33 @@ def reject(
 # ─────────────────────────────────────────────────────────────────
 # 관리자 대시보드 요약
 # ─────────────────────────────────────────────────────────────────
+
+@router.get("/feedbacks")
+def list_feedbacks(
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """불만족 피드백 목록 (관리자 전용)"""
+    feedbacks = db.execute(
+        select(MeetingFeedback)
+        .where(MeetingFeedback.is_satisfied == False)
+        .order_by(MeetingFeedback.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    ).scalars().all()
+    return [
+        {
+            "id": f.id,
+            "meeting_id": f.meeting_id,
+            "user_id": f.user_id,
+            "complaint": f.complaint,
+            "created_at": f.created_at.isoformat(),
+        }
+        for f in feedbacks
+    ]
+
 
 @router.get("/verifications/stats")
 def verification_stats(

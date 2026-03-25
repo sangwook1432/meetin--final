@@ -3,6 +3,7 @@ annotated-types==0.7.0
 anyio==4.12.1
 apscheduler==3.10.4
 bcrypt==5.0.0
+cryptography>=43.0.0
 click==8.3.1
 colorama==0.4.6
 dnspython==2.8.0
@@ -39,3 +40,4 @@ tzdata==2025.3
 uvicorn==0.32.1
 watchfiles==1.1.1
 websockets==16.0
+redis[asyncio]>=5.0.0

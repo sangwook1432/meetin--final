@@ -16,11 +16,13 @@ export type DocType = "ENROLLMENT_CERT" | "STUDENT_ID";
 
 export interface UserPublic {
   id: number;
-  email: string;
+  username: string | null;
   phone_last4: string;
   phone_e164: string | null;
   verification_status: VerificationStatus;
   is_admin: boolean;
+  phone: string | null;
+  real_name: string | null;
   nickname: string | null;
   gender: Gender | null;
   university: string | null;
@@ -33,6 +35,8 @@ export interface UserPublic {
   lookalike_value: string | null;
   photo_url_1: string | null;
   photo_url_2: string | null;
+  cover_url: string | null;
+  qa_answers: string | null;  // JSON string
   balance: number;
   matching_tickets: number;
 }
@@ -164,6 +168,13 @@ export interface AfterTarget {
   age: number | null;
   bio_short: string | null;
   photo_url_1: string | null;
+}
+
+export interface ProfilePost {
+  id: number;
+  photo_url: string;
+  caption: string | null;
+  created_at: string;
 }
 
 export interface AfterRequestItem {

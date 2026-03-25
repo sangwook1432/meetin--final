@@ -1,4 +1,5 @@
 "use client";
+import ErrorBanner from "@/components/ui/ErrorBanner";
 
 /**
  * /me/schedule — 내 미팅 일정
@@ -16,6 +17,7 @@ import { AppShell } from "@/components/ui/AppShell";
 interface ScheduleItem {
   meeting_id: number;
   meeting_type: string;
+  title: string | null;
   chat_room_id: number | null;
   schedule: {
     date: string | null;
@@ -59,8 +61,8 @@ export default function SchedulePage() {
         <h2 className="mb-5 text-lg font-bold text-gray-900">📅 내 미팅 일정</h2>
 
         {error && (
-          <div className="mb-4 rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">
-            {error}
+          <div className="mb-4">
+            <ErrorBanner message={error} />
           </div>
         )}
 
@@ -88,10 +90,12 @@ export default function SchedulePage() {
                 {/* 헤더 */}
                 <div className="mb-4 flex items-center justify-between">
                   <div>
-                    <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">
+                    <p className="font-semibold text-gray-900 text-sm">
+                      {item.title ?? `미팅 #${item.meeting_id}`}
+                    </p>
+                    <span className="mt-1 inline-block rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">
                       {MEETING_TYPE_LABELS[item.meeting_type] ?? item.meeting_type}
                     </span>
-                    <p className="mt-1.5 text-xs text-gray-400">미팅 #{item.meeting_id}</p>
                   </div>
                   {item.schedule.confirmed && (
                     <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700">

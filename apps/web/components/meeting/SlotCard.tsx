@@ -9,6 +9,7 @@
  * WAITING_CONFIRM 상태에서 확정/대기 여부가 핵심 UI임
  */
 
+import Link from "next/link";
 import type { MeetingSlot } from "@/types";
 
 interface SlotCardProps {
@@ -56,19 +57,19 @@ export function SlotCard({ slot, index, isHost = false, onInviteClick }: SlotCar
       }`}
     >
       {/* 아바타 */}
-      <div className="relative flex-shrink-0">
+      <Link href={`/profile/${user.user_id}`} onClick={(e) => e.stopPropagation()} className="relative flex-shrink-0">
         {user.photo_url_1 ? (
           <img
             src={user.photo_url_1.startsWith("http") ? user.photo_url_1 : `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}${user.photo_url_1}`}
             alt="profile"
-            className="h-10 w-10 rounded-full object-cover"
+            className="h-10 w-10 rounded-full object-cover ring-2 ring-white hover:ring-blue-300 transition-all"
           />
         ) : (
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-300 text-sm font-bold text-white">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-300 text-sm font-bold text-white hover:bg-gray-400 transition-colors">
             {index}
           </div>
         )}
-      </div>
+      </Link>
 
       {/* 유저 정보 */}
       <div className="min-w-0 flex-1">

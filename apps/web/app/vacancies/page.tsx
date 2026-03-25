@@ -25,6 +25,24 @@ export default function VacanciesPage() {
   const [meetings, setMeetings] = useState<MeetingListItem[]>([]);
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
+  const [visitedIds, setVisitedIds] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    if (!user) return;
+    try {
+      const raw = localStorage.getItem(`visited_meetings_${user.id}`);
+      setVisitedIds(new Set(raw ? JSON.parse(raw) : []));
+    } catch { /* ignore */ }
+  }, [user?.id]);
+
+  const markVisited = (id: number) => {
+    if (!user) return;
+    setVisitedIds((prev) => {
+      const next = new Set(prev).add(id);
+      localStorage.setItem(`visited_meetings_${user.id}`, JSON.stringify([...next]));
+      return next;
+    });
+  };
 
   const fetchMeetings = useCallback(async () => {
     try {
@@ -105,8 +123,12 @@ export default function VacanciesPage() {
               <MeetingCard
                 key={m.meeting_id}
                 meeting={m}
-                onClick={() => router.push(`/meetings/${m.meeting_id}`)}
+                onClick={() => {
+                  markVisited(m.meeting_id);
+                  router.push(`/meetings/${m.meeting_id}`);
+                }}
                 variant="vacancy"
+                visited={visitedIds.has(m.meeting_id)}
               />
             ))}
           </div>

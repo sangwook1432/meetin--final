@@ -1,11 +1,43 @@
 import re
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, Field, field_validator
+
+
+class PhoneSendRequest(BaseModel):
+    phone: str
+
+
+class PhoneVerifyRequest(BaseModel):
+    phone: str
+    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+    # KG이니시스 계약 전 mock용 — 인증 성공 시 토큰에 함께 저장
+    mock_name: str | None = None
+    mock_birth_date: str | None = None   # YYYYMMDD
+    mock_gender: str | None = None       # "M" | "F"
+
+
+class PhoneTokenInfoResponse(BaseModel):
+    phone: str | None = None
+    name: str | None = None
+    birth_date: str | None = None
+    gender: str | None = None
+    age: int | None = None
+
+
+class PhoneVerifyResponse(BaseModel):
+    phone_token: str
 
 
 class RegisterRequest(BaseModel):
-    email: EmailStr
+    username: str = Field(min_length=3, max_length=50)
     password: str = Field(min_length=8, max_length=72)
-    phone: str  # KR only MVP
+    phone_token: str  # POST /auth/phone/verify 후 발급된 토큰
+
+    @field_validator("username")
+    @classmethod
+    def username_format(cls, v: str) -> str:
+        if not re.match(r'^[a-zA-Z0-9_.\-]+$', v):
+            raise ValueError("아이디는 영문, 숫자, _, -, . 만 사용 가능합니다.")
+        return v.lower()
 
     @field_validator("password")
     @classmethod
@@ -16,7 +48,7 @@ class RegisterRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    username: str
     password: str
 
 

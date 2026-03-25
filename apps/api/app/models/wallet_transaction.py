@@ -12,9 +12,11 @@ class TxType(str, enum.Enum):
     CHARGE         = "CHARGE"           # 토스 결제로 잔액 충전
     DEPOSIT_HOLD   = "DEPOSIT_HOLD"     # 미팅 보증금 차감 (잔액 → 예치)
     DEPOSIT_REFUND = "DEPOSIT_REFUND"   # 보증금 환불 (예치 → 잔액)
+    FORFEIT        = "FORFEIT"          # 보증금/매칭권 몰수 (채팅방 이탈 노쇼)
     WITHDRAW       = "WITHDRAW"         # 잔액 반환 출금 신청
     WITHDRAW_DONE  = "WITHDRAW_DONE"    # 출금 완료 확정 (운영자)
     ADMIN_ADJUST   = "ADMIN_ADJUST"     # 운영자 수동 조정
+    TICKET_PURCHASE = "TICKET_PURCHASE" # 매칭권 구매 (잔액 차감)
 
 class WalletTransaction(Base):
     __tablename__ = "wallet_transactions"

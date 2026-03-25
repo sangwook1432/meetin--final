@@ -26,8 +26,11 @@ class AdminVerificationAction(BaseModel):
 
 class AdminUserVerificationOut(BaseModel):
     user_id: int
-    email: str
+    username: str | None = None
     nickname: str | None = None
     university: str | None = None
+    major: str | None = None
+    entry_year: int | None = None
+    age: int | None = None
     verification_status: VerificationStatus
     doc_count: int

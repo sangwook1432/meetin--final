@@ -36,7 +36,7 @@ import type { UserPublic } from "@/types";
 interface AuthContextValue {
   user: UserPublic | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (username: string, password: string) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>; // 프로필 업데이트 후 재조회용
 }
@@ -78,8 +78,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const tokens = await loginApi(email, password);
+  const login = useCallback(async (username: string, password: string) => {
+    const tokens = await loginApi(username, password);
     setTokens(tokens.access_token, tokens.refresh_token);
     const me = await getMe();
     setUser(me);

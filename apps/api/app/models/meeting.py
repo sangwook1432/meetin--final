@@ -15,6 +15,8 @@ class MeetingStatus(str, enum.Enum):
     FULL = "FULL"
     WAITING_CONFIRM = "WAITING_CONFIRM"
     CONFIRMED = "CONFIRMED"
+    CANCELLED = "CANCELLED"
+    COMPLETED = "COMPLETED"
 
 
 class Team(str, enum.Enum):
@@ -45,3 +47,15 @@ class Meeting(Base):
     # - 특정 학교면 preferred_universities_any=False + preferred_universities_raw="SNU,KU,HYU"
     preferred_universities_raw: Mapped[str | None] = mapped_column(Text, nullable=True)
     preferred_universities_any: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    # 가능 학번 범위 (2-digit, e.g. 22 = 22학번, None = 제한 없음) — 상대팀 조건
+    entry_year_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    entry_year_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # ✅ NEW: 우리팀 조건 (빈자리 페이지 필터링용)
+    my_team_universities_raw: Mapped[str | None] = mapped_column(Text, nullable=True)
+    my_team_universities_any: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="true")
+    my_team_entry_year_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    my_team_entry_year_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    title: Mapped[str | None] = mapped_column(Text, nullable=True)

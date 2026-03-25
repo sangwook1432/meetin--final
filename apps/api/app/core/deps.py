@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
@@ -44,6 +46,40 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
 
 
 def require_verified(user: User = Depends(get_current_user)) -> User:
+    if user.verification_status == VerificationStatus.PENDING:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="관리자 승인 대기 중입니다. 승인 완료 후 이용 가능합니다.",
+        )
+    if user.verification_status == VerificationStatus.REJECTED:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="재학 인증이 거절되었습니다. 서류를 다시 제출해주세요.",
+        )
     if user.verification_status != VerificationStatus.VERIFIED:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="VERIFIED required")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="재학 인증이 필요합니다.",
+        )
+
+    if user.is_banned:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="이용이 영구 정지된 계정입니다.",
+        )
+
+    if user.suspended_until:
+        now = datetime.now(timezone.utc)
+        if user.suspended_until.tzinfo is None:
+            from datetime import timezone as _tz
+            suspended = user.suspended_until.replace(tzinfo=_tz.utc)
+        else:
+            suspended = user.suspended_until
+        if suspended > now:
+            until_str = suspended.astimezone().strftime("%Y년 %m월 %d일 %H:%M")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"서비스 이용이 정지된 계정입니다. {until_str}까지 이용 제한됩니다.",
+            )
+
     return user

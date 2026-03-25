@@ -24,7 +24,7 @@ class Settings(BaseSettings):
 
     phone_hmac_secret: str = Field(alias="PHONE_HMAC_SECRET")
 
-    admin_emails: str = Field(default="", alias="ADMIN_EMAILS")
+    admin_usernames: str = Field(default="", alias="ADMIN_USERNAMES")
 
     # CORS: 콤마 구분 허용 origin 목록
     allowed_origins: str = Field(
@@ -47,14 +47,24 @@ class Settings(BaseSettings):
     kakao_template_forfeited: str = Field(default="MEETIN_FORF", alias="KAKAO_TPL_FORFEITED")
     kakao_template_replacement: str = Field(default="MEETIN_REPL", alias="KAKAO_TPL_REPLACEMENT")
 
+    # ─── PASS 휴대폰 본인인증 (Solapi SMS) ──────────────────────────
+    # https://developers.solapi.com → API 키 발급 후 아래 3개만 입력
+    pass_api_key: str = Field(default="", alias="PASS_API_KEY")
+    pass_api_secret: str = Field(default="", alias="PASS_API_SECRET")
+    pass_sender_number: str = Field(default="", alias="PASS_SENDER_NUMBER")
+
+    # ─── Redis ───────────────────────────────────────────────────
+    # 없으면 WebSocket 인메모리 모드, 스케줄러 단일 실행 모드로 fallback
+    redis_url: str = Field(default="", alias="REDIS_URL")
+
     # ─── Sentry ──────────────────────────────────────────────────
     sentry_dsn: str = Field(default="", alias="SENTRY_DSN")
 
-    def admin_email_set(self) -> set[str]:
-        raw = (self.admin_emails or "").strip()
+    def admin_username_set(self) -> set[str]:
+        raw = (self.admin_usernames or "").strip()
         if not raw:
             return set()
-        return {e.strip().lower() for e in raw.split(",") if e.strip()}
+        return {u.strip().lower() for u in raw.split(",") if u.strip()}
 
     def allowed_origins_list(self) -> list[str]:
         """환경변수 하나로 여러 origin 관리 — 배포 시 프론트 도메인만 추가하면 됨"""

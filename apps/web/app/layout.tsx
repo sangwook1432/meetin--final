@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
+import { Noto_Sans_KR } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 
-const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
+const notoSansKR = Noto_Sans_KR({ subsets: ["latin"], weight: ["400", "500", "600", "700", "900"] });
 
 export const metadata: Metadata = {
   title: "MEETIN — 대학생 팀 미팅 플랫폼",
@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ko">
-      <body className={`${geist.variable} font-sans antialiased`}>
+      <body className={`${notoSansKR.className} antialiased`}>
         <AuthProvider>
           {children}
         </AuthProvider>

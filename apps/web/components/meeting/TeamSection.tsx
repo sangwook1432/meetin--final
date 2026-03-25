@@ -13,6 +13,9 @@ import { SlotCard } from "./SlotCard";
 interface TeamSectionProps {
   team: Team;
   slots: MeetingSlot[];
+  hostUserId?: number;
+  canInvite?: boolean;
+  onInviteSlot?: () => void;
 }
 
 const TEAM_LABEL: Record<Team, string> = {
@@ -25,7 +28,7 @@ const TEAM_COLOR: Record<Team, string> = {
   FEMALE: "bg-pink-500",
 };
 
-export function TeamSection({ team, slots }: TeamSectionProps) {
+export function TeamSection({ team, slots, hostUserId, canInvite, onInviteSlot }: TeamSectionProps) {
   const teamSlots = slots
     .filter((s) => s.team === team)
     .sort((a, b) => a.slot_index - b.slot_index);
@@ -46,7 +49,13 @@ export function TeamSection({ team, slots }: TeamSectionProps) {
       {/* 슬롯 리스트 */}
       <div className="flex flex-col gap-3 p-4">
         {teamSlots.map((slot, i) => (
-          <SlotCard key={`${slot.team}-${slot.slot_index}`} slot={slot} index={i + 1} />
+          <SlotCard
+            key={`${slot.team}-${slot.slot_index}`}
+            slot={slot}
+            index={i + 1}
+            isHost={!!hostUserId && slot.user?.user_id === hostUserId}
+            onInviteClick={canInvite && slot.user === null ? onInviteSlot : undefined}
+          />
         ))}
       </div>
     </div>

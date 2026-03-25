@@ -1,5 +1,7 @@
 import enum
+from datetime import datetime
 from sqlalchemy import String, Integer, Boolean, Enum, Text
+from sqlalchemy.dialects.postgresql import TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -26,7 +28,8 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
-    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    username: Mapped[str | None] = mapped_column(String(50), unique=True, index=True, nullable=True)
+    email: Mapped[str | None] = mapped_column(String(255), unique=True, index=True, nullable=True)
     password_hash: Mapped[str] = mapped_column(String(255))
 
     # 전화번호: HMAC 해시(검색용) + 마지막 4자리(표시용) + E.164 원문(알림 발송용)
@@ -47,6 +50,7 @@ class User(Base):
         index=True,
     )
 
+    real_name: Mapped[str | None] = mapped_column(String(50), nullable=True, comment="KG이니시스 본인인증으로 확인된 실명")
     nickname: Mapped[str | None] = mapped_column(String(50), nullable=True)
     gender: Mapped[Gender | None] = mapped_column(Enum(Gender, name="gender_enum"), nullable=True)
     university: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -65,6 +69,21 @@ class User(Base):
 
     photo_url_1: Mapped[str | None] = mapped_column(Text, nullable=True)
     photo_url_2: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cover_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    qa_answers: Mapped[str | None] = mapped_column(Text, nullable=True, comment="10문 10답 JSON {\"1\":\"...\", ...}")
 
     # 잔액 (단위: 원) — Toss 충전으로만 증가, 보증금 차감/환급으로 변동
     balance: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    # 매칭권 (개) — 잔액으로 구매, 채팅방 개설 시 소모
+    matching_tickets: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    # 출금 계좌
+    bank_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    account_number: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    account_holder: Mapped[str | None] = mapped_column(String(30), nullable=True)
+
+    # 제재 시스템
+    warning_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    suspended_until: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    is_banned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

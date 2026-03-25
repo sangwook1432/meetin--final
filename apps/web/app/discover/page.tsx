@@ -16,12 +16,14 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import {
   discoverMeetings, createMeeting,
-  getMyInvitations, respondToInvitation,
+  getMyInvitations, respondToInvitation, replaceConfirm,
   pendingFriendRequests, acceptFriendRequest, rejectFriendRequest,
+  getMyNotifications, markNotificationRead,
+  submitFeedback, getAfterTargets, submitAfterRequest,
 } from "@/lib/api";
 import { AppShell } from "@/components/ui/AppShell";
 import { MeetingCard } from "@/components/meeting/MeetingCard";
-import type { MeetingListItem, MeetingType } from "@/types";
+import type { MeetingListItem, MeetingType, AfterTarget } from "@/types";
 
 const UNIVERSITIES = [
   "서울대학교", "연세대학교", "고려대학교", "성균관대학교", "한양대학교",
@@ -37,18 +39,53 @@ export default function DiscoverPage() {
   const [meetings, setMeetings] = useState<MeetingListItem[]>([]);
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
+  const [visitedIds, setVisitedIds] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    if (!user) return;
+    try {
+      const raw = localStorage.getItem(`visited_meetings_${user.id}`);
+      setVisitedIds(new Set(raw ? JSON.parse(raw) : []));
+    } catch { /* ignore */ }
+  }, [user?.id]);
+
+  const markVisited = (id: number) => {
+    if (!user) return;
+    setVisitedIds((prev) => {
+      const next = new Set(prev).add(id);
+      localStorage.setItem(`visited_meetings_${user.id}`, JSON.stringify([...next]));
+      return next;
+    });
+  };
 
   // 미팅 생성 모달
   const [showModal, setShowModal] = useState(false);
 
   // 알림 관련
   const [pendingInvites, setPendingInvites] = useState<{
-    id: number; meeting_id: number; invite_type: string; inviter_nickname: string | null;
+    id: number; meeting_id: number; invite_type: string; status: string; inviter_nickname: string | null;
   }[]>([]);
   const [pendingFriends, setPendingFriends] = useState<{
     friendship_id: number; requester_id: number; nickname: string | null;
   }[]>([]);
+  const [systemNotifs, setSystemNotifs] = useState<{
+    id: number; notif_type: string; message: string; meeting_id: number | null;
+  }[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  // 보증금 확인 모달 (REPLACE 초대용)
+  const [depositConfirm, setDepositConfirm] = useState<{ inviteId: number; inviteeNick: string | null } | null>(null);
+  const [depositLoading, setDepositLoading] = useState(false);
+
+  // 미팅 완료 후 후기/애프터 모달
+  const [postMeetingState, setPostMeetingState] = useState<{ meetingId: number; startAt: "ask_after" | "complaint" } | null>(null);
+
+  // 재학 인증 서류 제출 여부 (localStorage 기반)
+  const [docPending, setDocPending] = useState(false);
+  useEffect(() => {
+    if (user) {
+      setDocPending(localStorage.getItem(`doc_pending_${user.id}`) === "1");
+    }
+  }, [user?.id]);
 
   // ─── 목록 불러오기 ─────────────────────────────────────
   const fetchMeetings = useCallback(async () => {
@@ -66,12 +103,14 @@ export default function DiscoverPage() {
   // ─── 알림 불러오기 ────────────────────────────────────
   const fetchNotifications = useCallback(async () => {
     try {
-      const [inviteRes, friendRes] = await Promise.all([
+      const [inviteRes, friendRes, notifRes] = await Promise.all([
         getMyInvitations(),
         pendingFriendRequests(),
+        getMyNotifications(),
       ]);
       setPendingInvites(inviteRes.invitations);
       setPendingFriends(friendRes.requests);
+      setSystemNotifs(notifRes.notifications);
     } catch {}
   }, []);
 
@@ -87,17 +126,63 @@ export default function DiscoverPage() {
     return () => clearInterval(id);
   }, [authLoading, user, fetchMeetings, fetchNotifications, router]);
 
-  const handleInviteRespond = async (inviteId: number, accept: boolean) => {
+  // REPLACE 초대: 수락 클릭 → 보증금 확인 모달 표시
+  const handleInviteAccept = (inv: { id: number; invite_type: string; inviter_nickname: string | null }) => {
+    if (inv.invite_type === "REPLACE") {
+      setDepositConfirm({ inviteId: inv.id, inviteeNick: inv.inviter_nickname });
+    } else {
+      handleFriendInviteAccept(inv.id);
+    }
+  };
+
+  // FRIEND 초대 수락
+  const handleFriendInviteAccept = async (inviteId: number) => {
     try {
-      const res = await respondToInvitation(inviteId, accept);
-      if (accept && res.meeting_id) {
-        router.push(`/meetings/${res.meeting_id}`);
+      const res = await respondToInvitation(inviteId, true);
+      if (res.meeting_id) router.push(`/meetings/${res.meeting_id}`);
+      else fetchNotifications();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "처리 실패";
+      if (msg.includes("이미") || msg.includes("만료") || msg.includes("410") || msg.includes("400")) {
+        alert("이미 참여한 미팅입니다.");
       } else {
-        fetchNotifications();
+        alert(msg);
       }
+      fetchNotifications();
+    }
+  };
+
+  // 초대 거절
+  const handleInviteReject = async (inviteId: number) => {
+    try {
+      await respondToInvitation(inviteId, false);
+      fetchNotifications();
     } catch (e) {
       alert(e instanceof Error ? e.message : "처리 실패");
     }
+  };
+
+  // 보증금 확인 모달 — 예 클릭
+  const handleDepositConfirm = async () => {
+    if (!depositConfirm) return;
+    setDepositLoading(true);
+    try {
+      const res = await replaceConfirm(depositConfirm.inviteId);
+      setDepositConfirm(null);
+      if (res.chat_room_id) router.push(`/chats/${res.chat_room_id}`);
+      else router.push(`/meetings/${res.meeting_id}`);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "처리 실패");
+    } finally {
+      setDepositLoading(false);
+    }
+  };
+
+  // 보증금 확인 모달 — 아니요 클릭 = 거절
+  const handleDepositCancel = async () => {
+    if (!depositConfirm) return;
+    setDepositConfirm(null);
+    await handleInviteReject(depositConfirm.inviteId);
   };
 
   const handleFriendAccept = async (friendshipId: number) => {
@@ -118,7 +203,7 @@ export default function DiscoverPage() {
     }
   };
 
-  const totalNotifications = pendingInvites.length + pendingFriends.length;
+  const totalNotifications = pendingInvites.length + pendingFriends.length + systemNotifs.length;
 
   if (authLoading) {
     return (
@@ -163,7 +248,7 @@ export default function DiscoverPage() {
         </div>
 
         {/* 미인증 안내 배너 */}
-        {user?.verification_status !== "VERIFIED" && (
+        {user?.verification_status !== "VERIFIED" && !docPending && (
           <div
             onClick={() => router.push("/me/docs")}
             className="mb-4 cursor-pointer rounded-2xl border border-yellow-200 bg-yellow-50 px-4 py-3"
@@ -171,6 +256,14 @@ export default function DiscoverPage() {
             <p className="text-sm font-semibold text-yellow-800">⚠️ 재학 인증이 필요합니다</p>
             <p className="mt-0.5 text-xs text-yellow-600">
               미팅에 참가하려면 재학증명서를 제출해야 합니다. 탭하여 진행하세요 →
+            </p>
+          </div>
+        )}
+        {user?.verification_status !== "VERIFIED" && docPending && (
+          <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3">
+            <p className="text-sm font-semibold text-blue-800">⏳ 재학 인증 검토 중</p>
+            <p className="mt-0.5 text-xs text-blue-600">
+              서류를 제출했습니다. 관리자 검토 후 인증이 완료됩니다.
             </p>
           </div>
         )}
@@ -207,7 +300,8 @@ export default function DiscoverPage() {
               <MeetingCard
                 key={m.meeting_id}
                 meeting={m}
-                onClick={() => router.push(`/meetings/${m.meeting_id}`)}
+                visited={visitedIds.has(m.meeting_id)}
+                onClick={() => { markVisited(m.meeting_id); router.push(`/meetings/${m.meeting_id}`); }}
               />
             ))}
           </div>
@@ -230,11 +324,74 @@ export default function DiscoverPage() {
         <NotificationModal
           pendingInvites={pendingInvites}
           pendingFriends={pendingFriends}
-          onInviteRespond={handleInviteRespond}
+          systemNotifs={systemNotifs}
+          onInviteAccept={(inv) => { setShowNotifications(false); handleInviteAccept(inv); }}
+          onInviteReject={(id) => { handleInviteReject(id); fetchNotifications(); }}
           onFriendAccept={handleFriendAccept}
           onFriendReject={handleFriendReject}
+          onSystemNotifDismiss={async (id) => {
+            await markNotificationRead(id).catch(() => {});
+            setSystemNotifs((prev) => prev.filter((n) => n.id !== id));
+          }}
+          onMeetingCompleted={(notifId, meetingId, startAt) => {
+            markNotificationRead(notifId).catch(() => {});
+            setSystemNotifs((prev) => prev.filter((n) => n.id !== notifId));
+            setShowNotifications(false);
+            if (startAt === "complaint") {
+              setPostMeetingState({ meetingId, startAt: "complaint" });
+            } else {
+              submitFeedback(meetingId, true).catch(() => {});
+              setPostMeetingState({ meetingId, startAt: "ask_after" });
+            }
+          }}
           onClose={() => setShowNotifications(false)}
         />
+      )}
+
+      {/* 미팅 완료 후 후기/애프터 모달 */}
+      {postMeetingState !== null && (
+        <PostMeetingModal
+          meetingId={postMeetingState.meetingId}
+          startAt={postMeetingState.startAt}
+          userPhone={user?.phone ?? null}
+          onClose={() => setPostMeetingState(null)}
+        />
+      )}
+
+
+      {/* 매칭권 소모 확인 모달 (REPLACE 초대) */}
+      {depositConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={() => setDepositConfirm(null)}>
+          <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-base font-bold text-gray-900">매칭권 소모 확인</p>
+              <button
+                onClick={() => setDepositConfirm(null)}
+                className="flex h-7 w-7 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 text-lg"
+              >✕</button>
+            </div>
+            <p className="mt-3 text-sm text-gray-600 text-center leading-relaxed">
+              {depositConfirm.inviteeNick || "누군가"}님이 초대한 미팅에 참가하려면<br />
+              <span className="font-bold text-blue-600">매칭권 1개</span>를 소모해야 합니다.
+            </p>
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={handleDepositCancel}
+                disabled={depositLoading}
+                className="flex-1 rounded-xl border border-gray-200 py-3 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              >
+                아니요 (거절)
+              </button>
+              <button
+                onClick={handleDepositConfirm}
+                disabled={depositLoading}
+                className="flex-1 rounded-xl bg-blue-600 py-3 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {depositLoading ? "처리 중..." : "예, 참가하기"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </AppShell>
   );
@@ -245,21 +402,27 @@ export default function DiscoverPage() {
 // ─────────────────────────────────────────────────────
 
 function NotificationModal({
-  pendingInvites, pendingFriends,
-  onInviteRespond, onFriendAccept, onFriendReject, onClose,
+  pendingInvites, pendingFriends, systemNotifs,
+  onInviteAccept, onInviteReject, onFriendAccept, onFriendReject,
+  onSystemNotifDismiss, onMeetingCompleted, onClose,
 }: {
-  pendingInvites: { id: number; meeting_id: number; invite_type: string; inviter_nickname: string | null }[];
+  pendingInvites: { id: number; meeting_id: number; invite_type: string; status: string; inviter_nickname: string | null }[];
   pendingFriends: { friendship_id: number; requester_id: number; nickname: string | null }[];
-  onInviteRespond: (id: number, accept: boolean) => void;
+  systemNotifs: { id: number; notif_type: string; message: string; meeting_id: number | null }[];
+  onInviteAccept: (inv: { id: number; invite_type: string; inviter_nickname: string | null }) => void;
+  onInviteReject: (id: number) => void;
   onFriendAccept: (id: number) => void;
   onFriendReject: (id: number) => void;
+  onSystemNotifDismiss: (id: number) => void;
+  onMeetingCompleted: (notifId: number, meetingId: number, startAt?: "complaint") => void;
   onClose: () => void;
 }) {
-  const total = pendingInvites.length + pendingFriends.length;
+  const router = useRouter();
+  const total = pendingInvites.length + pendingFriends.length + systemNotifs.length;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40">
-      <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-10 max-h-[80vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
+      <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-10 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="mb-5 flex items-center justify-between">
           <h2 className="text-lg font-bold text-gray-900">
             알림 {total > 0 && <span className="text-red-500">({total})</span>}
@@ -274,30 +437,41 @@ function NotificationModal({
         ) : (
           <div className="space-y-3">
             {/* 미팅 초대 */}
-            {pendingInvites.map((inv) => (
-              <div key={inv.id} className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
-                <p className="text-sm font-semibold text-blue-800">
-                  {inv.invite_type === "REPLACE" ? "🔄 대체 인원 초대" : "👥 미팅 초대"}
-                </p>
-                <p className="mt-1 text-xs text-blue-600">
-                  {inv.inviter_nickname || "누군가"}님이 미팅 #{inv.meeting_id}에 초대했습니다
-                </p>
-                <div className="mt-3 flex gap-2">
-                  <button
-                    onClick={() => onInviteRespond(inv.id, true)}
-                    className="flex-1 rounded-xl bg-blue-600 py-2 text-xs font-bold text-white hover:bg-blue-700"
-                  >
-                    수락
-                  </button>
-                  <button
-                    onClick={() => onInviteRespond(inv.id, false)}
-                    className="flex-1 rounded-xl border border-gray-200 bg-white py-2 text-xs font-medium text-gray-600 hover:bg-gray-50"
-                  >
-                    거절
-                  </button>
+            {pendingInvites.map((inv) => {
+              const isReplace = inv.invite_type === "REPLACE";
+              const isDepositPending = inv.status === "DEPOSIT_PENDING";
+              return (
+                <div key={inv.id} className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                  <p className="text-sm font-semibold text-blue-800">
+                    {isReplace ? "🔄 대체 인원 초대" : "👥 미팅 초대"}
+                  </p>
+                  <p className="mt-1 text-xs text-blue-600">
+                    {inv.inviter_nickname || "누군가"}님이 미팅 #{inv.meeting_id}에 초대했습니다
+                  </p>
+                  {isDepositPending && (
+                    <p className="mt-1 text-xs font-semibold text-orange-600">
+                      ⏳ 매칭권 납부 대기 중
+                    </p>
+                  )}
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      onClick={() => onInviteAccept(inv)}
+                      className="flex-1 rounded-xl bg-blue-600 py-2 text-xs font-bold text-white hover:bg-blue-700"
+                    >
+                      {isReplace ? (isDepositPending ? "매칭권 납부" : "수락") : "수락"}
+                    </button>
+                    {!isDepositPending && (
+                      <button
+                        onClick={() => onInviteReject(inv.id)}
+                        className="flex-1 rounded-xl border border-gray-200 bg-white py-2 text-xs font-medium text-gray-600 hover:bg-gray-50"
+                      >
+                        거절
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
             {/* 친구 요청 */}
             {pendingFriends.map((req) => (
@@ -322,6 +496,126 @@ function NotificationModal({
                 </div>
               </div>
             ))}
+
+            {/* 시스템 알림 */}
+            {systemNotifs.map((notif) => {
+              if (notif.notif_type === "MEETING_COMPLETED" && notif.meeting_id) {
+                return (
+                  <div key={notif.id} className="rounded-2xl border border-purple-100 bg-purple-50 p-4">
+                    <p className="text-sm font-semibold text-purple-800">✨ 미팅 완료</p>
+                    <p className="mt-1 text-xs text-purple-600">{notif.message}</p>
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        onClick={() => onMeetingCompleted(notif.id, notif.meeting_id!)}
+                        className="flex-1 rounded-xl bg-purple-600 py-2 text-xs font-bold text-white hover:bg-purple-700"
+                      >
+                        예
+                      </button>
+                      <button
+                        onClick={() => onMeetingCompleted(notif.id, notif.meeting_id!, "complaint")}
+                        className="flex-1 rounded-xl border border-gray-200 bg-white py-2 text-xs font-medium text-gray-600 hover:bg-gray-50"
+                      >
+                        아니요
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
+              if (notif.notif_type === "AFTER_REQUEST_RECEIVED") {
+                return (
+                  <div key={notif.id} className="rounded-2xl border border-pink-100 bg-pink-50 p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-semibold text-pink-800">💌 애프터 신청</p>
+                      <button
+                        onClick={() => onSystemNotifDismiss(notif.id)}
+                        className="flex h-6 w-6 items-center justify-center rounded-full text-pink-400 hover:bg-pink-100 text-sm"
+                      >✕</button>
+                    </div>
+                    <p className="mt-1 text-xs text-pink-700">{notif.message}</p>
+                    <button
+                      onClick={() => { onSystemNotifDismiss(notif.id); window.location.href = "/me/messages"; }}
+                      className="mt-3 w-full rounded-xl bg-pink-500 py-2 text-xs font-bold text-white hover:bg-pink-600"
+                    >
+                      쪽지함 보기
+                    </button>
+                  </div>
+                );
+              }
+              if (notif.notif_type === "CHAT_ROOM_ACTIVATED") {
+                return (
+                  <div key={notif.id} className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-semibold text-emerald-800">💬 채팅방 활성화</p>
+                      <button
+                        onClick={() => onSystemNotifDismiss(notif.id)}
+                        className="flex h-6 w-6 items-center justify-center rounded-full text-emerald-400 hover:bg-emerald-100 text-sm"
+                      >✕</button>
+                    </div>
+                    <p className="mt-1 text-xs text-emerald-700">{notif.message}</p>
+                    <button
+                      onClick={() => {
+                        onSystemNotifDismiss(notif.id);
+                        if (notif.meeting_id) router.push(`/meetings/${notif.meeting_id}`);
+                      }}
+                      className="mt-3 w-full rounded-xl bg-emerald-600 py-2 text-xs font-bold text-white hover:bg-emerald-700"
+                    >
+                      채팅방 입장 →
+                    </button>
+                  </div>
+                );
+              }
+              if (notif.notif_type === "WAITING_CONFIRM") {
+                return (
+                  <div key={notif.id} className="rounded-2xl border border-yellow-100 bg-yellow-50 p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-semibold text-yellow-800">🎉 인원 충족</p>
+                      <button
+                        onClick={() => onSystemNotifDismiss(notif.id)}
+                        className="flex h-6 w-6 items-center justify-center rounded-full text-yellow-400 hover:bg-yellow-100 hover:text-yellow-600 text-sm"
+                      >✕</button>
+                    </div>
+                    <p className="mt-1 text-xs text-yellow-700">{notif.message}</p>
+                    {notif.meeting_id && (
+                      <button
+                        onClick={() => {
+                          onSystemNotifDismiss(notif.id);
+                          router.push(`/meetings/${notif.meeting_id}`);
+                        }}
+                        className="mt-3 w-full rounded-xl bg-yellow-500 py-2 text-xs font-bold text-white hover:bg-yellow-600"
+                      >
+                        미팅 확인하기 →
+                      </button>
+                    )}
+                  </div>
+                );
+              }
+              if (notif.notif_type === "ACCOUNT_PENALTY") {
+                return (
+                  <div key={notif.id} className="rounded-2xl border border-red-100 bg-red-50 p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-semibold text-red-800">🚨 계정 제재</p>
+                      <button
+                        onClick={() => onSystemNotifDismiss(notif.id)}
+                        className="flex h-6 w-6 items-center justify-center rounded-full text-red-400 hover:bg-red-100 hover:text-red-600 text-sm"
+                      >✕</button>
+                    </div>
+                    <p className="mt-1 text-xs text-red-700">{notif.message}</p>
+                  </div>
+                );
+              }
+              return (
+                <div key={notif.id} className="rounded-2xl border border-orange-100 bg-orange-50 p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-semibold text-orange-800">⚠️ 미팅 취소</p>
+                    <button
+                      onClick={() => onSystemNotifDismiss(notif.id)}
+                      className="flex h-6 w-6 items-center justify-center rounded-full text-orange-400 hover:bg-orange-100 hover:text-orange-600 text-sm"
+                    >✕</button>
+                  </div>
+                  <p className="mt-1 text-xs text-orange-700">{notif.message}</p>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -338,15 +632,35 @@ interface CreateMeetingModalProps {
   onCreated: (meetingId: number) => void;
 }
 
+const ENTRY_YEARS = [18, 19, 20, 21, 22, 23, 24, 25, 26];
+
 function CreateMeetingModal({ onClose, onCreated }: CreateMeetingModalProps) {
   const [meetingType, setMeetingType] = useState<MeetingType>("TWO_BY_TWO");
+  const [title, setTitle] = useState("");
+  // 상대팀 조건
   const [preferAny, setPreferAny] = useState(true);
   const [selectedUnis, setSelectedUnis] = useState<string[]>([]);
+  const [entryYearAny, setEntryYearAny] = useState(true);
+  const [entryYearMin, setEntryYearMin] = useState<number>(ENTRY_YEARS[0]);
+  const [entryYearMax, setEntryYearMax] = useState<number>(ENTRY_YEARS[ENTRY_YEARS.length - 1]);
+  // 우리팀 조건
+  const [myPreferAny, setMyPreferAny] = useState(true);
+  const [mySelectedUnis, setMySelectedUnis] = useState<string[]>([]);
+  const [myEntryYearAny, setMyEntryYearAny] = useState(true);
+  const [myEntryYearMin, setMyEntryYearMin] = useState<number>(ENTRY_YEARS[0]);
+  const [myEntryYearMax, setMyEntryYearMax] = useState<number>(ENTRY_YEARS[ENTRY_YEARS.length - 1]);
+
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const toggleUni = (uni: string) => {
     setSelectedUnis((prev) =>
+      prev.includes(uni) ? prev.filter((u) => u !== uni) : [...prev, uni]
+    );
+  };
+
+  const toggleMyUni = (uni: string) => {
+    setMySelectedUnis((prev) =>
       prev.includes(uni) ? prev.filter((u) => u !== uni) : [...prev, uni]
     );
   };
@@ -357,10 +671,19 @@ function CreateMeetingModal({ onClose, onCreated }: CreateMeetingModalProps) {
     try {
       const res = await createMeeting({
         meeting_type: meetingType,
+        title: title.trim() || undefined,
         preferred_universities_any: preferAny,
         preferred_universities_raw: !preferAny && selectedUnis.length > 0
           ? selectedUnis.join(",")
           : undefined,
+        entry_year_min: entryYearAny ? undefined : entryYearMin,
+        entry_year_max: entryYearAny ? undefined : entryYearMax,
+        my_team_universities_any: myPreferAny,
+        my_team_universities_raw: !myPreferAny && mySelectedUnis.length > 0
+          ? mySelectedUnis.join(",")
+          : undefined,
+        my_team_entry_year_min: myEntryYearAny ? undefined : myEntryYearMin,
+        my_team_entry_year_max: myEntryYearAny ? undefined : myEntryYearMax,
       });
       onCreated(res.meeting_id);
     } catch (e) {
@@ -371,8 +694,8 @@ function CreateMeetingModal({ onClose, onCreated }: CreateMeetingModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm sm:items-center">
-      <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-8 shadow-2xl sm:rounded-3xl">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm sm:items-center" onClick={onClose}>
+      <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-8 shadow-2xl sm:rounded-3xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-6 flex items-center justify-between">
           <h2 className="text-lg font-bold text-gray-900">새 미팅 만들기</h2>
           <button
@@ -383,7 +706,20 @@ function CreateMeetingModal({ onClose, onCreated }: CreateMeetingModalProps) {
           </button>
         </div>
 
-        <div className="space-y-5">
+        <div className="space-y-5 max-h-[70vh] overflow-y-auto pb-1">
+          {/* 제목 */}
+          <div>
+            <p className="mb-2.5 text-sm font-semibold text-gray-700">미팅 제목</p>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="예) 연고대 환영 3:3"
+              maxLength={30}
+              className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-400 focus:outline-none"
+            />
+          </div>
+
           {/* 미팅 유형 */}
           <div>
             <p className="mb-2.5 text-sm font-semibold text-gray-700">미팅 유형</p>
@@ -408,6 +744,130 @@ function CreateMeetingModal({ onClose, onCreated }: CreateMeetingModalProps) {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* 우리팀 조건 구분선 */}
+          <div className="flex items-center gap-2">
+            <div className="flex-1 border-t border-gray-100" />
+            <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">우리팀 조건</span>
+            <div className="flex-1 border-t border-gray-100" />
+          </div>
+
+          {/* 우리팀 학교 조건 */}
+          <div>
+            <p className="mb-2.5 text-sm font-semibold text-gray-700">우리팀 학교 조건</p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => { setMyPreferAny(true); setMySelectedUnis([]); }}
+                className={`flex-1 rounded-xl py-2.5 text-sm border-2 font-medium transition-all ${
+                  myPreferAny ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-gray-200 text-gray-500"
+                }`}
+              >
+                🌍 아무 학교
+              </button>
+              <button
+                type="button"
+                onClick={() => setMyPreferAny(false)}
+                className={`flex-1 rounded-xl py-2.5 text-sm border-2 font-medium transition-all ${
+                  !myPreferAny ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-gray-200 text-gray-500"
+                }`}
+              >
+                🏫 학교 선택
+              </button>
+            </div>
+
+            {!myPreferAny && (
+              <div className="mt-3 rounded-2xl border border-gray-100 bg-gray-50 p-3">
+                <p className="mb-2 text-xs text-gray-400">원하는 학교를 선택하세요 (복수 선택 가능)</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {UNIVERSITIES.map((uni) => (
+                    <button
+                      key={uni}
+                      type="button"
+                      onClick={() => toggleMyUni(uni)}
+                      className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all border ${
+                        mySelectedUnis.includes(uni)
+                          ? "border-emerald-400 bg-emerald-500 text-white"
+                          : "border-gray-200 bg-white text-gray-600 hover:border-emerald-200"
+                      }`}
+                    >
+                      {uni.replace("학교", "").replace("대학교", "대")}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 우리팀 학번 조건 */}
+          <div>
+            <p className="mb-2.5 text-sm font-semibold text-gray-700">우리팀 가능 학번</p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setMyEntryYearAny(true)}
+                className={`flex-1 rounded-xl py-2.5 text-sm border-2 font-medium transition-all ${
+                  myEntryYearAny ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-gray-200 text-gray-500"
+                }`}
+              >
+                🎓 전체 학번
+              </button>
+              <button
+                type="button"
+                onClick={() => setMyEntryYearAny(false)}
+                className={`flex-1 rounded-xl py-2.5 text-sm border-2 font-medium transition-all ${
+                  !myEntryYearAny ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-gray-200 text-gray-500"
+                }`}
+              >
+                📅 학번 지정
+              </button>
+            </div>
+
+            {!myEntryYearAny && (
+              <div className="mt-3 rounded-2xl border border-gray-100 bg-gray-50 p-3">
+                <p className="mb-2 text-xs text-gray-400">참가 가능 학번 범위를 선택하세요</p>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={myEntryYearMin}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      setMyEntryYearMin(v);
+                      if (v > myEntryYearMax) setMyEntryYearMax(v);
+                    }}
+                    className="flex-1 rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm text-center focus:outline-none focus:border-emerald-400"
+                  >
+                    {ENTRY_YEARS.map((y) => (
+                      <option key={y} value={y}>{y}학번</option>
+                    ))}
+                  </select>
+                  <span className="text-sm font-semibold text-gray-500">~</span>
+                  <select
+                    value={myEntryYearMax}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      setMyEntryYearMax(v);
+                      if (v < myEntryYearMin) setMyEntryYearMin(v);
+                    }}
+                    className="flex-1 rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm text-center focus:outline-none focus:border-emerald-400"
+                  >
+                    {ENTRY_YEARS.map((y) => (
+                      <option key={y} value={y}>{y}학번</option>
+                    ))}
+                  </select>
+                </div>
+                <p className="mt-1.5 text-xs text-center text-emerald-600 font-medium">
+                  {myEntryYearMin}학번 ~ {myEntryYearMax}학번
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* 상대팀 조건 구분선 */}
+          <div className="flex items-center gap-2">
+            <div className="flex-1 border-t border-gray-100" />
+            <span className="text-xs font-semibold text-blue-500 bg-blue-50 px-2.5 py-1 rounded-full">상대팀 조건</span>
+            <div className="flex-1 border-t border-gray-100" />
           </div>
 
           {/* 학교 선호 */}
@@ -457,6 +917,69 @@ function CreateMeetingModal({ onClose, onCreated }: CreateMeetingModalProps) {
             )}
           </div>
 
+          {/* 학번 범위 */}
+          <div>
+            <p className="mb-2.5 text-sm font-semibold text-gray-700">상대방 가능 학번</p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setEntryYearAny(true)}
+                className={`flex-1 rounded-xl py-2.5 text-sm border-2 font-medium transition-all ${
+                  entryYearAny ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-500"
+                }`}
+              >
+                🎓 전체 학번
+              </button>
+              <button
+                type="button"
+                onClick={() => setEntryYearAny(false)}
+                className={`flex-1 rounded-xl py-2.5 text-sm border-2 font-medium transition-all ${
+                  !entryYearAny ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-500"
+                }`}
+              >
+                📅 학번 지정
+              </button>
+            </div>
+
+            {!entryYearAny && (
+              <div className="mt-3 rounded-2xl border border-gray-100 bg-gray-50 p-3">
+                <p className="mb-2 text-xs text-gray-400">참가 가능 학번 범위를 선택하세요</p>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={entryYearMin}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      setEntryYearMin(v);
+                      if (v > entryYearMax) setEntryYearMax(v);
+                    }}
+                    className="flex-1 rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm text-center focus:outline-none focus:border-blue-400"
+                  >
+                    {ENTRY_YEARS.map((y) => (
+                      <option key={y} value={y}>{y}학번</option>
+                    ))}
+                  </select>
+                  <span className="text-sm font-semibold text-gray-500">~</span>
+                  <select
+                    value={entryYearMax}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      setEntryYearMax(v);
+                      if (v < entryYearMin) setEntryYearMin(v);
+                    }}
+                    className="flex-1 rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm text-center focus:outline-none focus:border-blue-400"
+                  >
+                    {ENTRY_YEARS.map((y) => (
+                      <option key={y} value={y}>{y}학번</option>
+                    ))}
+                  </select>
+                </div>
+                <p className="mt-1.5 text-xs text-center text-blue-600 font-medium">
+                  {entryYearMin}학번 ~ {entryYearMax}학번
+                </p>
+              </div>
+            )}
+          </div>
+
           {error && (
             <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
               {error}
@@ -471,6 +994,223 @@ function CreateMeetingModal({ onClose, onCreated }: CreateMeetingModalProps) {
             {creating ? "생성 중..." : "미팅 만들기 →"}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────
+// 미팅 완료 후기 & 애프터 신청 모달
+// ─────────────────────────────────────────────────────
+
+type PostMeetingStep =
+  | { kind: "ask_after" }
+  | { kind: "complaint" }
+  | { kind: "profiles"; targets: AfterTarget[] }
+  | { kind: "after"; target: AfterTarget };
+
+function PostMeetingModal({ meetingId, startAt, userPhone, onClose }: {
+  meetingId: number;
+  startAt: "ask_after" | "complaint";
+  userPhone: string | null;
+  onClose: () => void;
+}) {
+  const [step, setStep] = useState<PostMeetingStep>(
+    startAt === "complaint" ? { kind: "complaint" } : { kind: "ask_after" }
+  );
+  const [cachedTargets, setCachedTargets] = useState<AfterTarget[]>([]);
+  const [complaint, setComplaint] = useState("");
+  const [message, setMessage] = useState("");
+  const [phone] = useState(userPhone ?? "");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleAskAfterYes = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await getAfterTargets(meetingId);
+      setCachedTargets(res.targets);
+      setStep({ kind: "profiles", targets: res.targets });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "오류가 발생했습니다");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleComplaintSubmit = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await submitFeedback(meetingId, false, complaint);
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "제출 실패");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAfterSubmit = async (target: AfterTarget) => {
+    if (!message.trim()) { setError("메시지를 입력해주세요"); return; }
+    if (!phone.trim()) { setError("프로필에 전화번호가 등록되어 있지 않습니다"); return; }
+    if (message.length > 50) { setError("메시지는 50자 이하로 입력해주세요"); return; }
+    setLoading(true);
+    setError(null);
+    try {
+      await submitAfterRequest(meetingId, target.user_id, message);
+      alert(`${target.nickname || "상대방"}님께 애프터 신청을 보냈습니다!`);
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "신청 실패");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-10 shadow-2xl max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-5 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-gray-900">
+            {step.kind === "ask_after" && "미팅은 잘 진행되었나요?"}
+            {step.kind === "complaint" && "불편사항 접수"}
+            {step.kind === "profiles" && "맘에 들었던 분에게 애프터를 신청해보세요"}
+            {step.kind === "after" && "애프터 신청"}
+          </h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+        </div>
+
+        {error && (
+          <div className="mb-4 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-600">{error}</div>
+        )}
+
+        {step.kind === "ask_after" && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600 text-center">맘에 들었던 분께 애프터를 신청해보시겠습니까?</p>
+            <div className="flex gap-3">
+              <button
+                onClick={handleAskAfterYes}
+                disabled={loading}
+                className="flex-1 rounded-2xl bg-purple-600 py-4 text-sm font-bold text-white hover:bg-purple-700 disabled:opacity-50"
+              >
+                {loading ? "로딩 중..." : "예 💌"}
+              </button>
+              <button
+                onClick={onClose}
+                disabled={loading}
+                className="flex-1 rounded-2xl border border-gray-200 bg-white py-4 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                아니요
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step.kind === "complaint" && (
+          <div className="space-y-4">
+            <p className="text-xs text-gray-400">불편사항을 적어주세요. 내용은 관리자만 확인합니다.</p>
+            <textarea
+              value={complaint}
+              onChange={(e) => setComplaint(e.target.value)}
+              placeholder="불편했던 점을 자유롭게 작성해주세요..."
+              rows={4}
+              className="w-full resize-none rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-purple-400 focus:bg-white"
+            />
+            <button
+              onClick={handleComplaintSubmit}
+              disabled={loading}
+              className="w-full rounded-xl bg-gray-800 py-3 text-sm font-bold text-white hover:bg-gray-900 disabled:opacity-50"
+            >
+              {loading ? "제출 중..." : "제출하기"}
+            </button>
+          </div>
+        )}
+
+        {step.kind === "profiles" && (
+          <div className="space-y-3">
+            {step.targets.length === 0 ? (
+              <p className="py-8 text-center text-sm text-gray-400">상대방 프로필을 불러올 수 없습니다</p>
+            ) : (
+              step.targets.map((target) => (
+                <div key={target.user_id} className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
+                  <div className="flex items-center gap-3">
+                    {target.photo_url_1 ? (
+                      <img src={target.photo_url_1} alt="" className="h-12 w-12 rounded-full object-cover" />
+                    ) : (
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-200 text-gray-400 text-xl">👤</div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-gray-900 text-sm">{target.nickname || "익명"}</p>
+                      <p className="text-xs text-gray-400 truncate">
+                        {[target.university, target.entry_label, target.age ? `${target.age}세` : null].filter(Boolean).join(" · ")}
+                      </p>
+                      {target.bio_short && (
+                        <p className="mt-0.5 text-xs text-gray-500 truncate">{target.bio_short}</p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => { setStep({ kind: "after", target }); setMessage(""); setError(null); }}
+                      className="rounded-xl bg-pink-500 px-3 py-2 text-xs font-bold text-white hover:bg-pink-600 whitespace-nowrap"
+                    >
+                      💌 애프터
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+            <button
+              onClick={onClose}
+              className="w-full rounded-xl border border-gray-200 py-3 text-sm text-gray-500 hover:bg-gray-50"
+            >
+              없음
+            </button>
+          </div>
+        )}
+
+        {step.kind === "after" && (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-pink-100 bg-pink-50 p-3 text-xs text-pink-700">
+              {step.target.nickname || "상대방"}님에게 애프터를 신청합니다
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-gray-700">메시지 (최대 50자)</label>
+              <textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="전하고 싶은 말을 적어주세요..."
+                rows={3}
+                maxLength={50}
+                className="w-full resize-none rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-pink-400 focus:bg-white"
+              />
+              <p className="mt-1 text-right text-xs text-gray-400">{message.length}/50</p>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-gray-700">내 전화번호</label>
+              <div className="flex items-center rounded-2xl border border-gray-200 bg-gray-100 px-4 py-3">
+                <span className="flex-1 text-sm text-gray-700">{phone || "등록된 전화번호 없음"}</span>
+                <span className="text-xs text-gray-400">자동 입력</span>
+              </div>
+              <p className="mt-1 text-xs text-gray-400">프로필의 휴대폰 번호가 상대방에게 전달됩니다</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setStep({ kind: "profiles", targets: cachedTargets })}
+                className="flex-1 rounded-xl border border-gray-200 py-3 text-sm text-gray-500 hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                onClick={() => handleAfterSubmit((step as { kind: "after"; target: AfterTarget }).target)}
+                disabled={loading}
+                className="flex-1 rounded-xl bg-pink-500 py-3 text-sm font-bold text-white hover:bg-pink-600 disabled:opacity-50"
+              >
+                {loading ? "신청 중..." : "신청하기"}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

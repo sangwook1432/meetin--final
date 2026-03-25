@@ -124,55 +124,116 @@ export interface TokenResponse {
 }
 
 /** POST /auth/login — JSON body (백엔드 LoginRequest 기준) */
-export async function loginApi(email: string, password: string): Promise<TokenResponse> {
+export async function loginApi(username: string, password: string): Promise<TokenResponse> {
   const res = await fetch(`${BASE}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ username, password }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body?.detail ?? "로그인 실패");
+    const detail = body?.detail;
+    if (typeof detail === "string") throw new Error(detail);
+    throw new Error("로그인 실패");
   }
   return res.json();
 }
 
-/** POST /auth/find-email — 전화번호로 가입 이메일 찾기 */
-export async function findEmailByPhone(phone: string): Promise<{ masked_email: string }> {
-  const res = await fetch(`${BASE}/auth/find-email`, {
+/** POST /auth/find-username — phone_token으로 가입 아이디 찾기 */
+export async function findUsernameByToken(phone_token: string): Promise<{ masked_username: string | null }> {
+  const res = await fetch(`${BASE}/auth/find-username`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ phone_token }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = body?.detail;
+    if (typeof detail === "string") throw new Error(detail);
+    throw new Error("아이디 찾기 실패");
+  }
+  return res.json();
+}
+
+/** POST /auth/reset-password — phone_token으로 비밀번호 재설정 */
+export async function resetPasswordByToken(
+  phone_token: string,
+  newPassword: string
+): Promise<{ status: string }> {
+  const res = await fetch(`${BASE}/auth/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ phone_token, new_password: newPassword }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = body?.detail;
+    if (typeof detail === "string") throw new Error(detail);
+    throw new Error("비밀번호 재설정 실패");
+  }
+  return res.json();
+}
+
+/** POST /auth/phone/send — OTP 발송 */
+export async function sendPhoneOtp(phone: string): Promise<{ message: string }> {
+  const res = await fetch(`${BASE}/auth/phone/send`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ phone }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body?.detail ?? "이메일 찾기 실패");
+    const detail = body?.detail;
+    if (typeof detail === "string") throw new Error(detail);
+    throw new Error("인증번호 발송에 실패했습니다.");
   }
   return res.json();
 }
 
-/** POST /auth/reset-password — 전화번호 확인 후 비밀번호 재설정 */
-export async function resetPasswordByPhone(
+/** POST /auth/phone/verify — OTP 검증 후 phone_token 발급 */
+export async function verifyPhoneOtp(
   phone: string,
-  newPassword: string
-): Promise<{ status: string }> {
-  const res = await fetch(`${BASE}/auth/reset-password`, {
+  code: string,
+  mock?: { name?: string; birth_date?: string; gender?: string },
+): Promise<{ phone_token: string }> {
+  const res = await fetch(`${BASE}/auth/phone/verify`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ phone, new_password: newPassword }),
+    body: JSON.stringify({
+      phone,
+      code,
+      mock_name: mock?.name,
+      mock_birth_date: mock?.birth_date,
+      mock_gender: mock?.gender,
+    }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body?.detail ?? "비밀번호 재설정 실패");
+    const detail = body?.detail;
+    if (typeof detail === "string") throw new Error(detail);
+    throw new Error("인증번호가 올바르지 않습니다.");
   }
+  return res.json();
+}
+
+/** GET /auth/phone/token-info — phone_token으로 인증된 사용자 정보 조회 (폼 자동완성용) */
+export async function getPhoneTokenInfo(token: string): Promise<{
+  phone: string | null;
+  name: string | null;
+  birth_date: string | null;
+  gender: string | null;
+  age: number | null;
+}> {
+  const res = await fetch(`${BASE}/auth/phone/token-info?token=${encodeURIComponent(token)}`);
+  if (!res.ok) return { phone: null, name: null, birth_date: null, gender: null, age: null };
   return res.json();
 }
 
 /** POST /auth/register */
 export async function registerApi(payload: {
-  email: string;
+  username: string;
   password: string;
-  phone: string;
+  phone_token: string;
 }): Promise<TokenResponse> {
   const res = await fetch(`${BASE}/auth/register`, {
     method: "POST",
@@ -181,7 +242,13 @@ export async function registerApi(payload: {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body?.detail ?? "회원가입 실패");
+    const detail = body?.detail;
+    if (typeof detail === "string") throw new Error(detail);
+    if (Array.isArray(detail) && detail.length > 0) {
+      const first = detail[0];
+      throw new Error(typeof first?.msg === "string" ? first.msg : "입력값을 확인해주세요.");
+    }
+    throw new Error("회원가입 실패");
   }
   return res.json();
 }
@@ -405,6 +472,11 @@ export async function purchaseTickets(count: number): Promise<{
 // Chat Room
 // ─────────────────────────────────────────
 
+export interface ChatRoomMember {
+  user_id: number;
+  nickname: string;
+}
+
 export interface ChatRoomInfo {
   room_id: number;
   meeting_id: number;
@@ -413,6 +485,7 @@ export interface ChatRoomInfo {
   meeting_type: string;
   total_members: number;
   is_closed: boolean;
+  members: ChatRoomMember[];
   schedule: { date: string; time: string; place: string; confirmed: boolean } | null;
   cancel_vote_count: number;
   my_cancel_voted: boolean;
@@ -425,6 +498,11 @@ export async function getChatRoomInfo(roomId: number): Promise<ChatRoomInfo> {
   return apiFetch(`/chats/${roomId}/info`);
 }
 
+/** POST /meetings/{meetingId}/transfer-host — 호스트 재배정 (호스트만) */
+export async function transferHost(meetingId: number, newHostUserId: number): Promise<{ meeting_id: number; host_user_id: number; nickname: string }> {
+  return apiFetch(`/meetings/${meetingId}/transfer-host?new_host_user_id=${newHostUserId}`, { method: "POST" });
+}
+
 /** POST /chats/{roomId}/leave — 채팅방 나가기 */
 export async function leaveChatRoom(
   roomId: number,
@@ -434,6 +512,22 @@ export async function leaveChatRoom(
   return apiFetch(`/chats/${roomId}/leave`, {
     method: "POST",
     body: JSON.stringify({ leave_type: leaveType, replace_user_id: replaceUserId ?? null }),
+  });
+}
+
+/** POST /chats/{roomId}/report — 채팅 유저 신고 */
+export async function reportChatUser(
+  roomId: number,
+  payload: {
+    reported_user_id: number;
+    evidence_message_id: number;
+    reason: "SEXUAL_CONTENT" | "HARASSMENT" | "SPAM" | "OTHER";
+    detail?: string;
+  }
+): Promise<{ ok: boolean; report_id: number }> {
+  return apiFetch(`/chats/${roomId}/report`, {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
 }
 
@@ -682,9 +776,22 @@ export async function updateBankAccount(payload: {
 }
 
 /** POST /wallet/withdraw — 출금 신청 */
+export async function getWithdrawPreview(amount: number): Promise<{
+  refund_type: "청약철회" | "일반환불";
+  fee: number;
+  net_amount: number;
+  eligible: boolean;
+  reason: string;
+}> {
+  return apiFetch(`/wallet/withdraw/preview?amount=${amount}`);
+}
+
 export async function requestWithdraw(amount: number): Promise<{
   status: string;
   balance: number;
+  fee: number;
+  net_amount: number;
+  refund_type: string;
 }> {
   return apiFetch("/wallet/withdraw", {
     method: "POST",
@@ -763,17 +870,91 @@ export async function submitAfterRequest(
   meetingId: number,
   receiverId: number,
   message: string,
-  senderPhone: string
 ): Promise<{ status: string }> {
   return apiFetch(`/meetings/${meetingId}/after-request`, {
     method: "POST",
-    body: JSON.stringify({ receiver_id: receiverId, message, sender_phone: senderPhone }),
+    body: JSON.stringify({ receiver_id: receiverId, message }),
   });
 }
 
 /** GET /me/after-requests — 쪽지함 (수신된 애프터 신청 목록) */
 export async function getMyAfterRequests(): Promise<{ items: AfterRequestItem[] }> {
   return apiFetch("/me/after-requests");
+}
+
+/** DELETE /me — 회원 탈퇴 (잔액 0 필요) */
+export async function deleteAccount(): Promise<{ status: string }> {
+  return apiFetch("/me", { method: "DELETE" });
+}
+
+/** GET /users/{id}/profile — 공개 프로필 조회 */
+export async function getUserProfile(userId: number): Promise<{
+  user_id: number;
+  nickname: string | null;
+  university: string | null;
+  major: string | null;
+  entry_label: string | null;
+  age: number | null;
+  bio_short: string | null;
+  photo_url_1: string | null;
+  cover_url: string | null;
+  qa_answers: string | null;
+  posts: { id: number; photo_url: string; caption: string | null }[];
+}> {
+  return apiFetch(`/users/${userId}/profile`);
+}
+
+/** PATCH /me/qa — 10문 10답 저장 */
+export async function updateQA(answers: Record<string, string>): Promise<{ status: string }> {
+  return apiFetch("/me/qa", { method: "PATCH", body: JSON.stringify({ answers }) });
+}
+
+/** POST /me/cover/upload — 배경 커버 사진 업로드 */
+export async function uploadCoverPhoto(file: File): Promise<{ cover_url: string }> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${BASE}/me/cover/upload`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || "업로드 실패");
+  }
+  return res.json();
+}
+
+/** GET /me/profile-posts — 내 프로필 게시물 목록 */
+export async function getMyProfilePosts(): Promise<{ posts: import("@/types").ProfilePost[] }> {
+  return apiFetch("/me/profile-posts");
+}
+
+/** POST /me/profile-posts/upload — 게시물 사진 업로드 */
+export async function uploadProfilePost(
+  file: File,
+  caption?: string,
+): Promise<import("@/types").ProfilePost> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+  const form = new FormData();
+  form.append("file", file);
+  if (caption) form.append("caption", caption);
+  const res = await fetch(`${BASE}/me/profile-posts/upload`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || "업로드 실패");
+  }
+  return res.json();
+}
+
+/** DELETE /me/profile-posts/{id} — 게시물 삭제 */
+export async function deleteProfilePost(id: number): Promise<{ status: string }> {
+  return apiFetch(`/me/profile-posts/${id}`, { method: "DELETE" });
 }
 
 /** POST /me/docs/upload — JPG 파일 업로드 */

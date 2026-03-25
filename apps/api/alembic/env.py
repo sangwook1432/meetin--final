@@ -5,16 +5,8 @@ from sqlalchemy import engine_from_config, pool
 from app.core.config import settings
 from app.db.base import Base
 
-# 반드시 모델 import (autogenerate/metadata용)
-from app.models.user import User  # noqa: F401
-from app.models.verification_doc import VerificationDoc  # noqa: F401
-from app.models.meeting import Meeting  # noqa: F401
-from app.models.meeting_slot import MeetingSlot  # noqa: F401
-from app.models.deposit import Deposit  # noqa: F401
-from app.models.confirmation import Confirmation  # noqa: F401
-from app.models.chat_room import ChatRoom  # noqa: F401
-from app.models.replacement_request import ReplacementRequest  # noqa: F401
-from app.models.chat_message import ChatMessage  # noqa: F401
+# 반드시 모델 import (autogenerate/metadata용) — 누락 시 테이블 미생성
+import app.models  # noqa: F401  ← __init__.py 전체 로드로 한 줄로 해결
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)

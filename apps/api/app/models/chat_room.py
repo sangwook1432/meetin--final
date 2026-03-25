@@ -1,4 +1,4 @@
-from sqlalchemy import Integer, ForeignKey, UniqueConstraint, DateTime
+from sqlalchemy import Integer, ForeignKey, UniqueConstraint, DateTime, Boolean
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
@@ -19,6 +19,8 @@ class ChatRoom(Base):
         index=True,
         nullable=False,
     )
+
+    is_closed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     created_at: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True),

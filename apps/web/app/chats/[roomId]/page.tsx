@@ -20,7 +20,7 @@ import {
   agreeToCancelMeeting, agreeToSchedule,
   withdrawCancelVote, disagreeToCancelMeeting,
   withdrawScheduleVote, disagreeToSchedule,
-  listFriends,
+  listFriends, transferHost, reportChatUser,
 } from "@/lib/api";
 import type { ChatRoomInfo, FriendItem } from "@/lib/api";
 
@@ -54,9 +54,13 @@ export default function ChatRoomPage() {
   const [roomInfo, setRoomInfo] = useState<ChatRoomInfo | null>(null);
 
   // 모달 상태
+  const [reportModal, setReportModal] = useState<{
+    messageId: number; reportedUserId: number; reportedNickname: string;
+  } | null>(null);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [showVoteModal, setShowVoteModal] = useState(false);
+  const [showTransferHostModal, setShowTransferHostModal] = useState(false);
 
   const lastIdRef = useRef(0);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -199,6 +203,18 @@ export default function ChatRoomPage() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // ─── 호스트 재배정 ─────────────────────────────────────────────
+  const handleTransferHost = async (newHostUserId: number) => {
+    if (!roomInfo) return;
+    try {
+      await transferHost(roomInfo.meeting_id, newHostUserId);
+      setShowTransferHostModal(false);
+      await fetchRoomInfo();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "호스트 재배정 실패");
+    }
+  };
+
   // ─── 메시지 전송 ───────────────────────────────────────────────
   const handleSend = async () => {
     const content = input.trim();
@@ -282,6 +298,14 @@ export default function ChatRoomPage() {
                 📅 일정 제안
               </button>
             )}
+            {isHost && (
+              <button
+                onClick={() => setShowTransferHostModal(true)}
+                className="rounded-xl bg-yellow-50 px-3 py-1.5 text-xs font-semibold text-yellow-600 hover:bg-yellow-100 transition-colors whitespace-nowrap"
+              >
+                👑 호스트 넘기기
+              </button>
+            )}
             {!hasCancelVote && (
               <button
                 onClick={handleCancelPropose}
@@ -357,6 +381,20 @@ export default function ChatRoomPage() {
                 message={msg}
                 isMe={msg.sender_user_id === myUserId}
                 showNickname={!sameSenderAsPrev}
+                onAvatarClick={
+                  msg.sender_user_id !== myUserId && msg.sender_user_id !== 0
+                    ? () => router.push(`/profile/${msg.sender_user_id}`)
+                    : undefined
+                }
+                onReport={
+                  msg.sender_user_id !== myUserId && msg.sender_user_id !== 0
+                    ? () => setReportModal({
+                        messageId: msg.id,
+                        reportedUserId: msg.sender_user_id,
+                        reportedNickname: msg.sender_nickname ?? `#${msg.sender_user_id}`,
+                      })
+                    : undefined
+                }
               />
             );
           })
@@ -434,6 +472,24 @@ export default function ChatRoomPage() {
             await fetchRoomInfo();
             setShowVoteModal(true);
           }}
+        />
+      )}
+
+      {showTransferHostModal && roomInfo && (
+        <TransferHostModal
+          members={roomInfo.members.filter(m => m.user_id !== myUserId)}
+          onSelect={handleTransferHost}
+          onClose={() => setShowTransferHostModal(false)}
+        />
+      )}
+
+      {reportModal && (
+        <ReportModal
+          roomId={roomId}
+          messageId={reportModal.messageId}
+          reportedUserId={reportModal.reportedUserId}
+          reportedNickname={reportModal.reportedNickname}
+          onClose={() => setReportModal(null)}
         />
       )}
     </AppShell>
@@ -837,18 +893,18 @@ function ScheduleModal({
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">날짜</label>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none focus:border-blue-400" />
+              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 outline-none focus:border-blue-400" />
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">시간</label>
             <input type="time" value={time} onChange={(e) => setTime(e.target.value)}
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none focus:border-blue-400" />
+              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 outline-none focus:border-blue-400" />
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">장소</label>
             <input type="text" value={place} onChange={(e) => setPlace(e.target.value)}
               placeholder="예) 강남역 스타벅스 2층"
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none focus:border-blue-400" />
+              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 outline-none focus:border-blue-400" />
           </div>
           {error && <p className="text-xs text-red-500">{error}</p>}
           <button
@@ -864,13 +920,15 @@ function ScheduleModal({
   );
 }
 
-// ─── 말풍선 (투표 버튼 없음 — 정보성 표시만) ───────────────────────
+// ─── 말풍선 ──────────────────────────────────────────────────────
 function MessageBubble({
-  message, isMe, showNickname,
+  message, isMe, showNickname, onReport, onAvatarClick,
 }: {
   message: ChatMessage & { sender_nickname?: string | null; unread_count?: number };
   isMe: boolean;
   showNickname: boolean;
+  onReport?: () => void;
+  onAvatarClick?: () => void;
 }) {
   const time = new Date(message.created_at).toLocaleTimeString("ko-KR", {
     hour: "2-digit", minute: "2-digit",
@@ -927,15 +985,18 @@ function MessageBubble({
   return (
     <div className={`flex items-end gap-2 ${isMe ? "flex-row-reverse" : "flex-row"}`}>
       {!isMe && (
-        <div className="flex-shrink-0">
+        <button
+          className="flex-shrink-0 focus:outline-none"
+          onClick={onAvatarClick}
+        >
           {photoSrc ? (
-            <img src={photoSrc} alt={nickname} className="h-8 w-8 rounded-full object-cover" />
+            <img src={photoSrc} alt={nickname} className="h-8 w-8 rounded-full object-cover hover:ring-2 hover:ring-blue-300 transition-all" />
           ) : (
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-xs font-semibold text-gray-600">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-300 transition-colors">
               {nickname.charAt(0).toUpperCase()}
             </div>
           )}
-        </div>
+        </button>
       )}
       <div className={`flex flex-col gap-0.5 max-w-[72%] ${isMe ? "items-end" : "items-start"}`}>
         {!isMe && showNickname && (
@@ -955,8 +1016,195 @@ function MessageBubble({
           {!isMe && unread > 0 && (
             <span className="text-xs font-bold text-yellow-500 mb-0.5">{unread}</span>
           )}
+          {onReport && (
+            <button
+              onClick={onReport}
+              className="mb-0.5 flex-shrink-0 rounded-full p-1 text-gray-300 hover:bg-red-50 hover:text-red-400 transition-colors"
+              title="신고"
+            >
+              ⚑
+            </button>
+          )}
         </div>
         <span className="text-xs text-gray-400 px-1">{time}</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── 신고 모달 ────────────────────────────────────────────────────
+const REPORT_REASONS = [
+  { value: "SEXUAL_CONTENT", label: "성적 발언" },
+  { value: "HARASSMENT",     label: "욕설/비하" },
+  { value: "SPAM",           label: "도배" },
+  { value: "OTHER",          label: "기타" },
+] as const;
+
+type ReportReason = typeof REPORT_REASONS[number]["value"];
+
+function ReportModal({
+  roomId, messageId, reportedUserId, reportedNickname, onClose,
+}: {
+  roomId: number;
+  messageId: number;
+  reportedUserId: number;
+  reportedNickname: string;
+  onClose: () => void;
+}) {
+  const [reason, setReason] = useState<ReportReason | null>(null);
+  const [detail, setDetail] = useState("");
+  const [step, setStep] = useState<"select" | "confirm">("select");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!reason) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await reportChatUser(roomId, {
+        reported_user_id: reportedUserId,
+        evidence_message_id: messageId,
+        reason,
+        detail: reason === "OTHER" ? detail.trim() : undefined,
+      });
+      setDone(true);
+      setTimeout(onClose, 1500);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "신고 처리 실패");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
+      <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-10" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-5 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-gray-900">⚑ 신고</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+        </div>
+
+        {done ? (
+          <div className="py-8 text-center">
+            <p className="text-3xl mb-3">✅</p>
+            <p className="text-sm font-semibold text-gray-700">신고가 접수되었습니다</p>
+          </div>
+        ) : step === "confirm" ? (
+          <>
+            <div className="mb-5 rounded-2xl bg-orange-50 border border-orange-200 px-5 py-4">
+              <p className="text-sm font-bold text-orange-800 mb-2">⚠️ 신고 접수 전 확인해주세요</p>
+              <p className="text-sm text-orange-700 leading-relaxed">
+                신고 접수 후 관리자가 검수하며, <span className="font-semibold">사실로 확인될 경우 해당 미팅은 자동으로 취소</span>됩니다.
+              </p>
+              <p className="mt-2 text-xs text-orange-500">
+                허위 신고는 불이익이 발생할 수 있습니다.
+              </p>
+            </div>
+            {error && <p className="mb-3 text-xs text-red-500">{error}</p>}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setStep("select")}
+                className="flex-1 rounded-xl border-2 border-gray-200 py-3 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                아니요
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={loading}
+                className="flex-1 rounded-xl bg-red-500 py-3 text-sm font-bold text-white disabled:opacity-40 hover:bg-red-600 transition-colors"
+              >
+                {loading ? "처리 중..." : "예, 신고합니다"}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="mb-4 text-sm text-gray-500">
+              <span className="font-semibold text-gray-800">{reportedNickname}</span> 님을 신고합니다
+            </p>
+            <div className="space-y-2 mb-4">
+              {REPORT_REASONS.map(({ value, label }) => (
+                <button
+                  key={value}
+                  onClick={() => setReason(value)}
+                  className={`w-full rounded-xl border-2 py-3 text-sm font-semibold transition-all ${
+                    reason === value
+                      ? "border-red-400 bg-red-50 text-red-700"
+                      : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {reason === "OTHER" && (
+              <textarea
+                value={detail}
+                onChange={(e) => setDetail(e.target.value.slice(0, 200))}
+                placeholder="상세 사유를 입력해주세요 (최대 200자)"
+                rows={3}
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none focus:border-red-300 resize-none mb-4"
+              />
+            )}
+            <button
+              onClick={() => setStep("confirm")}
+              disabled={!reason || (reason === "OTHER" && !detail.trim())}
+              className="w-full rounded-xl bg-red-500 py-3 text-sm font-bold text-white disabled:opacity-40 hover:bg-red-600 transition-colors"
+            >
+              신고 접수
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── 호스트 재배정 모달 ───────────────────────────────────────────
+function TransferHostModal({
+  members,
+  onSelect,
+  onClose,
+}: {
+  members: { user_id: number; nickname: string }[];
+  onSelect: (userId: number) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [loading, setLoading] = useState<number | null>(null);
+
+  const handleSelect = async (userId: number) => {
+    if (!confirm(`이 멤버에게 호스트를 넘기시겠습니까?`)) return;
+    setLoading(userId);
+    await onSelect(userId);
+    setLoading(null);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
+      <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-10" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-5 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-gray-900">👑 호스트 넘기기</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+        </div>
+        {members.length === 0 ? (
+          <p className="text-center text-sm text-gray-400 py-4">넘길 수 있는 멤버가 없습니다.</p>
+        ) : (
+          <ul className="space-y-2">
+            {members.map((m) => (
+              <li key={m.user_id}>
+                <button
+                  onClick={() => handleSelect(m.user_id)}
+                  disabled={loading === m.user_id}
+                  className="w-full rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-800 hover:bg-yellow-50 hover:border-yellow-200 transition-colors disabled:opacity-50"
+                >
+                  {loading === m.user_id ? "처리 중..." : m.nickname}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );

@@ -17,6 +17,7 @@ class InviteType(str, enum.Enum):
 
 class InviteStatus(str, enum.Enum):
     PENDING = "PENDING"
+    DEPOSIT_PENDING = "DEPOSIT_PENDING"  # 수락했지만 보증금 미결제 상태
     ACCEPTED = "ACCEPTED"
     REJECTED = "REJECTED"
     EXPIRED = "EXPIRED"

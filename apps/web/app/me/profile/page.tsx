@@ -121,19 +121,10 @@ function ProfileInner() {
     e.preventDefault();
     setError(null);
 
-    if (!form.gender) { setError("성별은 필수입니다"); return; }
-    if (!form.university && !form.universityCustom) { setError("학교를 입력해주세요"); return; }
-
     setSaving(true);
     try {
-      const finalUni = form.university === "직접입력" ? form.universityCustom : form.university;
       await updateProfile({
         nickname: form.nickname || undefined,
-        gender: form.gender as Gender,
-        university: finalUni || undefined,
-        major: form.major || undefined,
-        entry_year: form.entry_year ? Number(form.entry_year) : undefined,
-        age: form.age ? Number(form.age) : undefined,
         preferred_area: form.preferred_area || undefined,
         bio_short: form.bio_short || undefined,
         lookalike_type: (form.lookalike_type as LookalikeType) || undefined,
@@ -173,7 +164,7 @@ function ProfileInner() {
           </div>
         )}
 
-        <h2 className="mb-5 text-lg font-bold text-gray-900">내 프로필</h2>
+        <h2 className="mb-5 text-lg font-bold text-gray-900">내 정보</h2>
 
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* 프로필 사진 */}
@@ -217,26 +208,19 @@ function ProfileInner() {
             </div>
           </section>
 
-          {/* 성별 — 필수 */}
+          {/* 성별 — 읽기 전용 */}
           <section className="rounded-2xl bg-white border border-gray-100 p-4 shadow-sm">
-            <SectionTitle required>성별</SectionTitle>
-            <div className="mt-3 flex gap-3">
-              {(["MALE", "FEMALE"] as Gender[]).map((g) => (
-                <button
-                  key={g}
-                  type="button"
-                  onClick={() => setForm((f) => ({ ...f, gender: g }))}
-                  className={`flex-1 rounded-xl py-3 text-sm font-semibold border-2 transition-all ${
-                    form.gender === g
-                      ? g === "MALE"
-                        ? "border-blue-500 bg-blue-50 text-blue-700"
-                        : "border-pink-500 bg-pink-50 text-pink-700"
-                      : "border-gray-200 text-gray-500 hover:border-gray-300"
-                  }`}
-                >
-                  {g === "MALE" ? "👨 남성" : "👩 여성"}
-                </button>
-              ))}
+            <SectionTitle>성별</SectionTitle>
+            <div className="mt-3">
+              <div className={`rounded-xl py-3 px-4 text-sm font-semibold text-center border-2 ${
+                user?.gender === "MALE"
+                  ? "border-blue-200 bg-blue-50 text-blue-700"
+                  : user?.gender === "FEMALE"
+                  ? "border-pink-200 bg-pink-50 text-pink-700"
+                  : "border-gray-200 bg-gray-50 text-gray-400"
+              }`}>
+                {user?.gender === "MALE" ? "👨 남성" : user?.gender === "FEMALE" ? "👩 여성" : "미설정"}
+              </div>
             </div>
           </section>
 
@@ -244,37 +228,50 @@ function ProfileInner() {
           <section className="rounded-2xl bg-white border border-gray-100 p-4 shadow-sm space-y-4">
             <SectionTitle>기본 정보</SectionTitle>
 
+            {/* 본인인증 정보 — 읽기 전용 */}
+            <div className="grid grid-cols-2 gap-3">
+              <FormField label="이름">
+                <div className={`${inputCls} bg-gray-100 text-gray-500 cursor-default`}>
+                  {user?.real_name ?? "—"}
+                </div>
+              </FormField>
+              <FormField label="전화번호">
+                <div className={`${inputCls} bg-gray-100 text-gray-500 cursor-default`}>
+                  {user?.phone ?? "—"}
+                </div>
+              </FormField>
+            </div>
             <FormField label="닉네임">
               <input type="text" value={form.nickname} onChange={set("nickname")}
                 placeholder="닉네임 (선택)" maxLength={50} className={inputCls} />
             </FormField>
 
-            <FormField label="학교" required>
-              <select value={form.university} onChange={set("university")} className={inputCls}>
-                <option value="">학교 선택</option>
-                {UNIVERSITIES.map((u) => <option key={u} value={u}>{u}</option>)}
-              </select>
-              {form.university === "직접입력" && (
-                <input type="text" value={form.universityCustom} onChange={set("universityCustom")}
-                  placeholder="학교명 직접 입력" className={`${inputCls} mt-2`} />
-              )}
+            <FormField label="학교">
+              <div className={`${inputCls} bg-gray-100 text-gray-500 cursor-default`}>
+                {user?.university ?? "—"}
+              </div>
             </FormField>
 
             <div className="grid grid-cols-2 gap-3">
               <FormField label="학과">
-                <input type="text" value={form.major} onChange={set("major")}
-                  placeholder="예) 컴퓨터공학과" className={inputCls} />
+                <div className={`${inputCls} bg-gray-100 text-gray-500 cursor-default`}>
+                  {user?.major ?? "—"}
+                </div>
               </FormField>
-              <FormField label="학번 (2자리)">
-                <input type="number" value={form.entry_year} onChange={set("entry_year")}
-                  placeholder="예) 24" min={0} max={99} className={inputCls} />
+              <FormField label="학번">
+                <div className={`${inputCls} bg-gray-100 text-gray-500 cursor-default`}>
+                  {user?.entry_year != null ? `${user.entry_year}학번` : "—"}
+                </div>
               </FormField>
             </div>
 
             <FormField label="나이">
-              <input type="number" value={form.age} onChange={set("age")}
-                placeholder="나이" min={18} max={40} className={inputCls} />
+              <div className={`${inputCls} bg-gray-100 text-gray-500 cursor-default`}>
+                {user?.age != null ? `${user.age}세` : "—"}
+              </div>
             </FormField>
+
+            <p className="text-xs text-gray-400">기본 정보 수정이 필요한 경우 관리자에게 문의 바랍니다</p>
           </section>
 
           {/* 미팅 선호 정보 */}

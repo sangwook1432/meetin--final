@@ -7,7 +7,7 @@
  * 백엔드 /me/docs/upload (multipart/form-data) 호출.
  */
 
-import { Suspense, useState, useRef } from "react";
+import { Suspense, useState, useRef, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { uploadDocFile } from "@/lib/api";
@@ -30,8 +30,23 @@ function DocsInner() {
   const [preview, setPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 서류 제출 여부: localStorage 기반으로 페이지 이동 후에도 유지
+  const docPendingKey = user ? `doc_pending_${user.id}` : null;
+  const [docSubmitted, setDocSubmitted] = useState(() => {
+    if (typeof window === "undefined" || !user) return false;
+    return localStorage.getItem(`doc_pending_${user.id}`) === "1";
+  });
+
+  // VERIFIED/REJECTED 확정 시 플래그 정리
+  useEffect(() => {
+    if (!docPendingKey) return;
+    if (user?.verification_status === "VERIFIED" || user?.verification_status === "REJECTED") {
+      localStorage.removeItem(docPendingKey);
+      setDocSubmitted(false);
+    }
+  }, [user?.verification_status, docPendingKey]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -60,7 +75,8 @@ function DocsInner() {
     try {
       await uploadDocFile(docType, file);
       await refreshUser();
-      setDone(true);
+      if (docPendingKey) localStorage.setItem(docPendingKey, "1");
+      setDocSubmitted(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "업로드 실패");
     } finally {
@@ -72,6 +88,7 @@ function DocsInner() {
 
   // ── VERIFIED 상태 ─────────────────────────────────────
   if (user.verification_status === "VERIFIED") {
+    if (docPendingKey) localStorage.removeItem(docPendingKey);
     return (
       <AppShell>
         <div className="mx-auto max-w-md px-4 py-10">
@@ -94,7 +111,7 @@ function DocsInner() {
   }
 
   // ── 업로드 완료(검토 대기) ──────────────────────────────
-  if (done) {
+  if (docSubmitted && user.verification_status !== "REJECTED") {
     return (
       <AppShell>
         <div className="mx-auto max-w-md px-4 py-10">

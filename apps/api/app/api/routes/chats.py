@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 import json as _json
 from collections import defaultdict
@@ -7,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from sqlalchemy.orm import Session
 from sqlalchemy import select, delete, func, and_, or_
@@ -143,6 +141,62 @@ def _send_system_message(db: Session, room_id: int, content: str) -> ChatMessage
     return msg
 
 
+async def _execute_forfeit_cancel(
+    db: Session,
+    room_id: int,
+    meeting: Meeting,
+    forfeit_user: User,
+    system_message: str,
+) -> None:
+    """
+    forfeit_user 매칭권 몰수 + 나머지 전원 환급 + 미팅 CANCELLED
+    + WS broadcast + 채팅방 삭제.
+    leave_chat_room(forfeit) 및 admin report confirm 모두에서 재사용.
+    """
+    from app.api.routes.wallet import forfeit_ticket, refund_ticket
+    from app.models.notification import Notification, NotifType
+
+    forfeit_ticket(db, forfeit_user, meeting.id)
+
+    all_slots = db.execute(
+        select(MeetingSlot).where(MeetingSlot.meeting_id == meeting.id)
+    ).scalars().all()
+
+    for s in all_slots:
+        if s.user_id is not None and s.user_id != forfeit_user.id:
+            member = db.get(User, s.user_id)
+            if member:
+                refund_ticket(db, member, meeting.id)
+                db.add(Notification(
+                    user_id=member.id,
+                    notif_type=NotifType.MEETING_CANCELLED,
+                    message=system_message,
+                    meeting_id=meeting.id,
+                ))
+
+    meeting.status = MeetingStatus.CANCELLED
+    for s in all_slots:
+        s.user_id = None
+        s.confirmed = False
+
+    sys_msg = _send_system_message(db, room_id, system_message)
+    db.commit()
+
+    await manager.broadcast(room_id, {
+        "type": "message", "id": sys_msg.id, "room_id": room_id,
+        "sender_user_id": 0, "sender_nickname": None,
+        "content": sys_msg.content,
+        "created_at": sys_msg.created_at.isoformat(),
+        "unread_count": 0,
+    })
+    await manager.broadcast(room_id, {"type": "room_closed", "reason": "cancelled"})
+
+    chat_room_obj = db.get(ChatRoom, room_id)
+    if chat_room_obj:
+        db.delete(chat_room_obj)
+        db.commit()
+
+
 def _get_total_members(db: Session, meeting_id: int) -> int:
     """미팅의 실제 참여 인원 수 (슬롯 중 user_id 채워진 것)"""
     return db.execute(
@@ -177,7 +231,8 @@ def _upsert_read_receipt(db: Session, room_id: int, user_id: int, message_id: in
 # ─── Schemas ─────────────────────────────────────────────────────
 
 class ChatSendIn(BaseModel):
-    content: str
+    content: str = Field(min_length=1, max_length=1000)
+    client_message_id: str | None = Field(default=None, max_length=64)
 
 
 class ChatMessageOut(BaseModel):
@@ -273,6 +328,24 @@ def get_chat_room_info(
         )
     ).first() is not None
 
+    # 멤버 목록 (user_id + nickname)
+    slots = db.execute(
+        select(MeetingSlot).where(
+            MeetingSlot.meeting_id == meeting.id,
+            MeetingSlot.user_id.isnot(None),
+        )
+    ).scalars().all()
+    member_ids = [s.user_id for s in slots]
+    members_map: dict[int, User] = {}
+    if member_ids:
+        member_users = db.execute(select(User).where(User.id.in_(member_ids))).scalars().all()
+        members_map = {u.id: u for u in member_users}
+
+    members = [
+        {"user_id": uid, "nickname": members_map[uid].nickname if uid in members_map else f"유저#{uid}"}
+        for uid in member_ids
+    ]
+
     return {
         "room_id": room_id,
         "meeting_id": room.meeting_id,
@@ -281,6 +354,7 @@ def get_chat_room_info(
         "meeting_type": meeting.meeting_type.value,
         "total_members": total_members,
         "is_closed": room.is_closed,
+        "members": members,
         "schedule": {
             "date": schedule.date,
             "time": schedule.time,
@@ -356,6 +430,89 @@ def get_messages(
             for m in msgs
         ]
     }
+
+
+# ─── 유저 신고 ───────────────────────────────────────────────────
+
+class ReportRequest(BaseModel):
+    reported_user_id: int
+    evidence_message_id: int
+    reason: str   # SEXUAL_CONTENT | HARASSMENT | SPAM | OTHER
+    detail: Optional[str] = None
+
+
+@router.post("/chats/{room_id}/report")
+def report_user(
+    room_id: int,
+    payload: ReportRequest,
+    db: Session = Depends(get_db),
+    user=Depends(require_verified),
+):
+    """채팅방 내 유저 신고. 증거 메시지 ID 포함."""
+    from app.models.chat_report import ChatReport, ReportReason, ReportStatus
+
+    if payload.reported_user_id == user.id:
+        raise HTTPException(400, "자기 자신을 신고할 수 없습니다.")
+
+    # 채팅방 확인
+    room = db.get(ChatRoom, room_id)
+    if not room:
+        raise HTTPException(404, "채팅방을 찾을 수 없습니다.")
+
+    # 신고자 멤버 확인
+    meeting = db.get(Meeting, room.meeting_id)
+    if not meeting:
+        raise HTTPException(404, "미팅을 찾을 수 없습니다.")
+
+    slots = db.execute(
+        select(MeetingSlot).where(MeetingSlot.meeting_id == meeting.id)
+    ).scalars().all()
+    member_ids = {s.user_id for s in slots if s.user_id is not None}
+
+    if user.id not in member_ids:
+        raise HTTPException(403, "해당 채팅방의 멤버가 아닙니다.")
+    if payload.reported_user_id not in member_ids:
+        raise HTTPException(400, "피신고자가 해당 채팅방의 멤버가 아닙니다.")
+
+    # 중복 신고 확인 (동일 room+reporter+reported PENDING)
+    existing = db.execute(
+        select(ChatReport).where(
+            ChatReport.room_id == room_id,
+            ChatReport.reporter_user_id == user.id,
+            ChatReport.reported_user_id == payload.reported_user_id,
+            ChatReport.status == ReportStatus.PENDING,
+        )
+    ).scalar_one_or_none()
+    if existing:
+        raise HTTPException(409, "이미 해당 유저에 대한 신고가 접수 중입니다.")
+
+    # 증거 메시지 스냅샷
+    evidence_content = None
+    msg = db.get(ChatMessage, payload.evidence_message_id)
+    if msg and msg.room_id == room_id:
+        evidence_content = msg.content
+
+    try:
+        reason = ReportReason(payload.reason)
+    except ValueError:
+        raise HTTPException(400, f"올바르지 않은 신고 사유입니다: {payload.reason}")
+
+    report = ChatReport(
+        room_id=room_id,
+        meeting_id=meeting.id,
+        reporter_user_id=user.id,
+        reported_user_id=payload.reported_user_id,
+        evidence_message_id=payload.evidence_message_id,
+        evidence_content=evidence_content,
+        reason=reason,
+        detail=payload.detail,
+        status=ReportStatus.PENDING,
+    )
+    db.add(report)
+    db.commit()
+    db.refresh(report)
+
+    return {"ok": True, "report_id": report.id}
 
 
 # ─── WebSocket 실시간 채팅 ────────────────────────────────────────
@@ -446,11 +603,23 @@ async def send_message(
     if not content:
         raise HTTPException(status_code=400, detail="content is required.")
 
+    # idempotency: 같은 client_message_id면 기존 메시지 반환
+    if payload.client_message_id:
+        existing = db.execute(
+            select(ChatMessage).where(
+                ChatMessage.sender_user_id == user.id,
+                ChatMessage.client_message_id == payload.client_message_id,
+            )
+        ).scalar_one_or_none()
+        if existing:
+            return existing
+
     msg = ChatMessage(
         room_id=room_id,
         sender_user_id=user.id,
         content=content,
         created_at=_now(),
+        client_message_id=payload.client_message_id,
     )
     db.add(msg)
     db.commit()
@@ -659,55 +828,11 @@ async def leave_chat_room(
         }
 
     elif payload.leave_type == "forfeit":
-        from app.api.routes.wallet import forfeit_ticket, refund_ticket
-        from app.models.notification import Notification, NotifType
-
-        # 1. 나가는 사람 매칭권 몰수 (no-op: 티켓은 이미 소모됨, 추가 차감 없음)
-        forfeit_ticket(db, user, meeting.id)
-
-        # 2. 전체 슬롯 조회 → 남은 멤버 매칭권 환급 + 알림 생성
-        all_slots = db.execute(
-            select(MeetingSlot).where(MeetingSlot.meeting_id == meeting.id)
-        ).scalars().all()
-
-        cancel_message = f"미팅 #{meeting.id}에서 한명이 나가 미팅이 취소되었습니다."
-        for s in all_slots:
-            if s.user_id is not None and s.user_id != user.id:
-                member = db.get(User, s.user_id)
-                if member:
-                    refund_ticket(db, member, meeting.id)
-                    db.add(Notification(
-                        user_id=member.id,
-                        notif_type=NotifType.MEETING_CANCELLED,
-                        message=cancel_message,
-                        meeting_id=meeting.id,
-                    ))
-
-        # 3. 미팅 CANCELLED + 슬롯 초기화
-        meeting.status = MeetingStatus.CANCELLED
-        for s in all_slots:
-            s.user_id = None
-            s.confirmed = False
-
-        # 시스템 메시지 생성 후 커밋 (room 삭제 전에 WS 브로드캐스트)
         nickname = user.nickname or f"유저#{user.id}"
-        sys_msg = _send_system_message(db, room_id,
-            f"[SYSTEM] {nickname}님이 나가서 미팅이 취소되었습니다.")
-        db.commit()
-
-        await manager.broadcast(room_id, {
-            "type": "message", "id": sys_msg.id, "room_id": room_id,
-            "sender_user_id": 0, "sender_nickname": None,
-            "content": sys_msg.content, "created_at": sys_msg.created_at.isoformat(), "unread_count": 0,
-        })
-        await manager.broadcast(room_id, {"type": "room_closed", "reason": "cancelled"})
-
-        # 4. 채팅방 삭제 (cascade로 메시지, 읽음기록 자동 삭제)
-        chat_room_obj = db.get(ChatRoom, room_id)
-        if chat_room_obj:
-            db.delete(chat_room_obj)
-            db.commit()
-
+        await _execute_forfeit_cancel(
+            db, room_id, meeting, user,
+            f"[SYSTEM] {nickname}님이 나가서 미팅이 취소되었습니다.",
+        )
         return {"status": "cancelled", "meeting_status": MeetingStatus.CANCELLED.value}
 
     else:
@@ -1162,8 +1287,9 @@ async def agree_schedule(
 
         return {"status": "confirmed", "vote_count": vote_count, "total_members": total_members}
     else:
+        nickname = user.nickname or f"유저#{user.id}"
         sys_msg = _send_system_message(db, room_id,
-            f"[SCHEDULE_VOTE] {vote_count}/{total_members}명 동의")
+            f"[SCHEDULE_VOTE] {nickname}님이 일정에 동의하였습니다. ({vote_count}/{total_members}명)")
         db.commit()
 
         await manager.broadcast(room_id, {
@@ -1184,6 +1310,15 @@ def get_meeting_schedule(
     db: Session = Depends(get_db),
     user=Depends(require_verified),
 ):
+    slot = db.execute(
+        select(MeetingSlot).where(
+            MeetingSlot.meeting_id == meeting_id,
+            MeetingSlot.user_id == user.id,
+        )
+    ).scalar_one_or_none()
+    if not slot:
+        raise HTTPException(status_code=403, detail="Not a member of this meeting")
+
     schedule = db.execute(
         select(MeetingSchedule).where(MeetingSchedule.meeting_id == meeting_id)
     ).scalar_one_or_none()

@@ -14,6 +14,7 @@ interface MeetingCardProps {
   meeting: MeetingListItem;
   onClick: () => void;
   variant?: "discover" | "vacancy";
+  visited?: boolean;
 }
 
 const MEETING_TYPE_LABEL: Record<string, string> = {
@@ -21,10 +22,11 @@ const MEETING_TYPE_LABEL: Record<string, string> = {
   THREE_BY_THREE: "3 : 3 미팅",
 };
 
-export function MeetingCard({ meeting, onClick, variant = "discover" }: MeetingCardProps) {
+export function MeetingCard({ meeting, onClick, variant = "discover", visited = false }: MeetingCardProps) {
   const {
     meeting_id,
     meeting_type,
+    title,
     status,
     filled,
     remaining_my_team,
@@ -66,14 +68,18 @@ export function MeetingCard({ meeting, onClick, variant = "discover" }: MeetingC
   return (
     <div
       onClick={onClick}
-      className="cursor-pointer rounded-2xl bg-white border border-gray-100 p-4 shadow-sm hover:border-blue-200 hover:shadow-md active:scale-98 transition-all"
+      className={`cursor-pointer rounded-2xl border p-4 shadow-sm transition-all active:scale-98 ${
+        visited
+          ? "bg-gray-50 border-gray-100 opacity-60 hover:opacity-80"
+          : "bg-white border-gray-100 hover:border-blue-200 hover:shadow-md"
+      }`}
     >
       <div className="flex items-start justify-between gap-2">
         {/* 왼쪽: 미팅 유형 + ID */}
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-lg font-black text-gray-900">
-              {MEETING_TYPE_LABEL[meeting_type] ?? meeting_type}
+              {title ?? `미팅 #${meeting_id}`}
             </span>
             {is_member && (
               <span className="rounded-full bg-blue-600 px-2 py-0.5 text-xs font-bold text-white">
@@ -81,7 +87,7 @@ export function MeetingCard({ meeting, onClick, variant = "discover" }: MeetingC
               </span>
             )}
           </div>
-          <p className="mt-0.5 text-xs text-gray-400">미팅 #{meeting_id}</p>
+          <p className="mt-0.5 text-xs text-gray-400">{MEETING_TYPE_LABEL[meeting_type] ?? meeting_type}</p>
         </div>
 
         {/* 오른쪽: 상태 뱃지 */}

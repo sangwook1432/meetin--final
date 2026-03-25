@@ -1,191 +1,188 @@
 """
-환불 배치 스케줄러
-
-역할:
-  - leave 시 REFUND_PENDING 으로 표시된 보증금을 주기적으로 조회
-  - Toss 취소 API 호출 후 REFUNDED 로 전환
-  - 실패 시 재시도 카운터 증가, MAX_RETRY 초과 시 FAILED_REFUND 로 표시
-    → 관리자 수동 처리 대상
-
-실행 주기: 5분마다 (APScheduler BackgroundScheduler)
-
-FastAPI lifespan 이벤트로 앱 시작/종료 시 스케줄러를 시작/중단.
+scheduler.py — 미팅 완료 감지 배치
+CONFIRMED 미팅 중 일정(date+time)이 현재 시각보다 과거인 경우:
+  1. meeting.status → COMPLETED
+  2. chat_room.is_closed → True
+  3. 멤버 전원에게 MEETING_COMPLETED 알림 생성
 """
 from __future__ import annotations
 
-import base64
+import asyncio
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone, timedelta
 
-import httpx
-from apscheduler.schedulers.background import BackgroundScheduler
-from sqlalchemy import select
-from sqlalchemy.orm import Session
-
-from app.core.config import settings
-from app.db.session import SessionLocal
-from app.models.deposit import Deposit, DepositStatus
+KST = timezone(timedelta(hours=9))
 
 logger = logging.getLogger("meetin.scheduler")
 
-MAX_RETRY = 3          # 최대 재시도 횟수
-INTERVAL_MINUTES = 5   # 실행 주기
+_task: asyncio.Task | None = None
 
 
-# ─────────────────────────────────────────────────────────────────
-# Toss 취소 API (동기)
-# ─────────────────────────────────────────────────────────────────
+def _check_completed_meetings() -> None:
+    """동기 함수 — asyncio loop 에서 executor 없이 직접 호출 (I/O bound 이므로 짧은 배치)"""
+    from app.db.session import SessionLocal
+    from app.models.meeting import Meeting, MeetingStatus
+    from app.models.meeting_schedule import MeetingSchedule
+    from app.models.meeting_slot import MeetingSlot
+    from app.models.chat_room import ChatRoom
+    from app.models.notification import Notification, NotifType
+    from sqlalchemy import select
 
-def _toss_cancel_sync(payment_key: str, amount: int, reason: str) -> dict:
-    """
-    Toss Payments 취소 API 동기 호출.
-    TOSS_SECRET_KEY 없으면 mock 성공 반환 (개발환경).
-    """
-    toss_secret = settings.toss_secret_key
-    if not toss_secret:
-        logger.info("[REFUND-BATCH] mock cancel payment_key=%s amount=%d", payment_key, amount)
-        return {"ok": True, "mock": True}
+    now = datetime.now(KST)
 
-    credentials = base64.b64encode(f"{toss_secret}:".encode()).decode()
-    try:
-        resp = httpx.post(
-            f"https://api.tosspayments.com/v1/payments/{payment_key}/cancel",
-            headers={
-                "Authorization": f"Basic {credentials}",
-                "Content-Type": "application/json",
-            },
-            json={"cancelReason": reason, "cancelAmount": amount},
-            timeout=10.0,
-        )
-        data = resp.json()
-        if resp.status_code == 200:
-            return {"ok": True, **data}
-        return {"ok": False, "code": data.get("code"), "message": data.get("message")}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+    with SessionLocal() as db:
+        # CONFIRMED 미팅 중 confirmed 일정이 있는 것을 with_for_update로 잠금
+        rows = db.execute(
+            select(Meeting, MeetingSchedule)
+            .join(MeetingSchedule, MeetingSchedule.meeting_id == Meeting.id)
+            .where(
+                Meeting.status == MeetingStatus.CONFIRMED,
+                MeetingSchedule.confirmed == True,
+                MeetingSchedule.date.isnot(None),
+                MeetingSchedule.time.isnot(None),
+            )
+            .with_for_update(skip_locked=True)
+        ).all()
 
+        completed_ids: list[int] = []
+        for meeting, schedule in rows:
+            try:
+                scheduled_dt = datetime.strptime(
+                    f"{schedule.date} {schedule.time}", "%Y-%m-%d %H:%M"
+                ).replace(tzinfo=KST)
+            except ValueError:
+                continue
 
-# ─────────────────────────────────────────────────────────────────
-# 배치 잡
-# ─────────────────────────────────────────────────────────────────
+            if scheduled_dt < now:
+                completed_ids.append(meeting.id)
+                meeting.status = MeetingStatus.COMPLETED
 
-def process_pending_refunds() -> None:
-    """
-    REFUND_PENDING 상태 deposit 을 일괄 처리.
+        if not completed_ids:
+            db.commit()
+            return
 
-    1. REFUND_PENDING deposit 조회 (최대 50건씩 처리)
-    2. toss_payment_key 있으면 Toss 취소 API 호출
-    3. 성공 → REFUNDED
-    4. 실패 → retry_count 증가, MAX_RETRY 초과 시 FAILED_REFUND
-    5. toss_payment_key 없으면 (prepare 후 결제 안 한 경우) → CANCELED
+        # chat_room 닫기
+        chat_rooms = db.execute(
+            select(ChatRoom).where(ChatRoom.meeting_id.in_(completed_ids))
+        ).scalars().all()
+        for room in chat_rooms:
+            room.is_closed = True
 
-    각 deposit 을 개별 트랜잭션으로 처리해
-    하나 실패해도 다른 건에 영향 없음.
-    """
-    db: Session = SessionLocal()
-    try:
-        pending = db.execute(
-            select(Deposit)
-            .where(Deposit.status == DepositStatus.REFUND_PENDING)
-            .order_by(Deposit.id.asc())
-            .limit(50)
+        # 멤버 조회 (user_id is not None)
+        slots = db.execute(
+            select(MeetingSlot).where(
+                MeetingSlot.meeting_id.in_(completed_ids),
+                MeetingSlot.user_id.isnot(None),
+            )
         ).scalars().all()
 
-        if not pending:
-            return
+        notifs: list[Notification] = []
+        for slot in slots:
+            notifs.append(Notification(
+                user_id=slot.user_id,
+                notif_type=NotifType.MEETING_COMPLETED,
+                message="미팅은 잘 진행되었나요?",
+                meeting_id=slot.meeting_id,
+            ))
 
-        logger.info("[REFUND-BATCH] processing %d deposits", len(pending))
+        db.add_all(notifs)
+        db.commit()
 
-        for deposit in pending:
-            _process_one(db, deposit)
-
-    except Exception as e:
-        logger.error("[REFUND-BATCH] batch error: %s", e, exc_info=True)
-    finally:
-        db.close()
+        logger.info("[SCHEDULER] completed meetings: %s", completed_ids)
 
 
-def _process_one(db: Session, deposit: Deposit) -> None:
-    """개별 deposit 환불 처리 (단일 트랜잭션)"""
-    try:
-        # toss_payment_key 없음 = 실제 결제 전이거나 mock → CANCELED 처리
-        if not deposit.toss_payment_key:
-            deposit.status = DepositStatus.CANCELED
-            db.commit()
-            logger.info(
-                "[REFUND-BATCH] no payment_key → CANCELED deposit_id=%d", deposit.id
+def _cleanup_old_meetings() -> None:
+    """COMPLETED 상태에서 확정 일정으로부터 7일이 경과한 미팅을 자동 삭제"""
+    from app.db.session import SessionLocal
+    from app.models.meeting import Meeting, MeetingStatus
+    from app.models.meeting_schedule import MeetingSchedule
+    from sqlalchemy import select
+
+    now = datetime.now(KST)
+    cutoff = now - timedelta(days=7)
+
+    with SessionLocal() as db:
+        rows = db.execute(
+            select(Meeting, MeetingSchedule)
+            .join(MeetingSchedule, MeetingSchedule.meeting_id == Meeting.id)
+            .where(
+                Meeting.status == MeetingStatus.COMPLETED,
+                MeetingSchedule.confirmed == True,
+                MeetingSchedule.date.isnot(None),
+                MeetingSchedule.time.isnot(None),
             )
-            return
+            .with_for_update(skip_locked=True)
+        ).all()
 
-        result = _toss_cancel_sync(
-            payment_key=deposit.toss_payment_key,
-            amount=deposit.amount,
-            reason="미팅 참가 취소 (자동 환불)",
-        )
+        deleted_ids: list[int] = []
+        for meeting, schedule in rows:
+            try:
+                scheduled_dt = datetime.strptime(
+                    f"{schedule.date} {schedule.time}", "%Y-%m-%d %H:%M"
+                ).replace(tzinfo=KST)
+            except ValueError:
+                continue
 
-        if result.get("ok"):
-            deposit.status = DepositStatus.REFUNDED
+            if scheduled_dt < cutoff:
+                deleted_ids.append(meeting.id)
+                db.delete(meeting)
+
+        if deleted_ids:
             db.commit()
-            logger.info(
-                "[REFUND-BATCH] REFUNDED deposit_id=%d meeting_id=%d amount=%d",
-                deposit.id, deposit.meeting_id, deposit.amount,
-            )
+            logger.info("[SCHEDULER] auto-deleted old completed meetings: %s", deleted_ids)
         else:
-            # 실패 → retry_count 증가
-            retry_count = getattr(deposit, "retry_count", 0) or 0
-            retry_count += 1
-            if retry_count >= MAX_RETRY:
-                deposit.status = DepositStatus.FAILED_REFUND
-                logger.error(
-                    "[REFUND-BATCH] FAILED_REFUND after %d retries deposit_id=%d error=%s",
-                    retry_count, deposit.id, result.get("message"),
-                )
-            else:
-                # retry_count 는 별도 컬럼 없으면 note 필드에 임시 저장
-                # (추후 retry_count 컬럼 추가 권장)
-                logger.warning(
-                    "[REFUND-BATCH] retry %d/%d deposit_id=%d error=%s",
-                    retry_count, MAX_RETRY, deposit.id, result.get("message"),
-                )
             db.commit()
 
-    except Exception as e:
-        db.rollback()
-        logger.error("[REFUND-BATCH] error deposit_id=%d: %s", deposit.id, e, exc_info=True)
 
+async def _run_loop() -> None:
+    while True:
+        from app.core.redis import get_redis
+        redis = get_redis()
 
-# ─────────────────────────────────────────────────────────────────
-# FastAPI lifespan 통합
-# ─────────────────────────────────────────────────────────────────
+        if redis:
+            # 다중 워커 환경: Redis 분산 락으로 1개 워커만 실행
+            # timeout=120 → 락 보유 최대 2분, 그 안에 작업 완료 예상
+            lock = redis.lock("scheduler:meeting_batch", timeout=120)
+            acquired = await lock.acquire(blocking=False)
+            if acquired:
+                try:
+                    await asyncio.get_event_loop().run_in_executor(None, _check_completed_meetings)
+                    await asyncio.get_event_loop().run_in_executor(None, _cleanup_old_meetings)
+                except Exception as exc:
+                    logger.exception("[SCHEDULER] error: %s", exc)
+                finally:
+                    try:
+                        await lock.release()
+                    except Exception:
+                        pass
+            else:
+                logger.debug("[SCHEDULER] lock not acquired — another worker is running the batch")
+        else:
+            # 단일 워커 환경 (Redis 없는 개발 환경): 그대로 실행
+            try:
+                await asyncio.get_event_loop().run_in_executor(None, _check_completed_meetings)
+            except Exception as exc:
+                logger.exception("[SCHEDULER] error in _check_completed_meetings: %s", exc)
+            try:
+                await asyncio.get_event_loop().run_in_executor(None, _cleanup_old_meetings)
+            except Exception as exc:
+                logger.exception("[SCHEDULER] error in _cleanup_old_meetings: %s", exc)
 
-_scheduler: BackgroundScheduler | None = None
+        await asyncio.sleep(600)  # 10분
 
 
 def start_scheduler() -> None:
-    global _scheduler
-    if _scheduler and _scheduler.running:
-        return
-
-    _scheduler = BackgroundScheduler(timezone="Asia/Seoul")
-    _scheduler.add_job(
-        process_pending_refunds,
-        trigger="interval",
-        minutes=INTERVAL_MINUTES,
-        id="refund_batch",
-        replace_existing=True,
-        max_instances=1,        # 동시 실행 1개만 허용
-    )
-    _scheduler.start()
-    logger.info(
-        "[SCHEDULER] started — refund_batch every %d min", INTERVAL_MINUTES
-    )
+    global _task
+    _task = asyncio.create_task(_run_loop())
+    logger.info("[SCHEDULER] meeting completion job started (interval=10min)")
 
 
 def stop_scheduler() -> None:
-    global _scheduler
-    if _scheduler and _scheduler.running:
-        _scheduler.shutdown(wait=False)
-        logger.info("[SCHEDULER] stopped")
+    global _task
+    if _task:
+        _task.cancel()
+        _task = None
 
 
 @asynccontextmanager
