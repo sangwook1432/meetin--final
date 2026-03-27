@@ -28,19 +28,12 @@ export function getToken(): string | null {
   return localStorage.getItem("access_token");
 }
 
-export function getRefreshToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("refresh_token");
-}
-
-export function setTokens(access: string, refresh: string) {
+export function setTokens(access: string) {
   localStorage.setItem("access_token", access);
-  localStorage.setItem("refresh_token", refresh);
 }
 
 export function clearTokens() {
   localStorage.removeItem("access_token");
-  localStorage.removeItem("refresh_token");
 }
 
 // ─────────────────────────────────────────
@@ -54,17 +47,14 @@ async function _tryRefresh(): Promise<boolean> {
   if (_refreshing) return _refreshing;
 
   _refreshing = (async () => {
-    const rt = getRefreshToken();
-    if (!rt) return false;
     try {
       const res = await fetch(`${BASE}/auth/refresh`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh_token: rt }),
+        credentials: "include",
       });
       if (!res.ok) return false;
       const data = await res.json();
-      setTokens(data.access_token, data.refresh_token);
+      setTokens(data.access_token);
       return true;
     } catch {
       return false;
@@ -114,13 +104,39 @@ async function apiFetch<T>(
   return text ? (JSON.parse(text) as T) : ({} as T);
 }
 
+// FormData 업로드용 — 401 시 refresh 후 1회 재시도
+async function apiFormFetch<T>(path: string, form: FormData, _retry = true): Promise<T> {
+  const token = getToken();
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+
+  if (res.status === 401 && _retry) {
+    const ok = await _tryRefresh();
+    if (ok) return apiFormFetch<T>(path, form, false);
+    clearTokens();
+    if (typeof window !== "undefined") window.location.href = "/login";
+    throw new Error("Session expired");
+  }
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = body?.error?.detail ?? body?.detail ?? `HTTP ${res.status}`;
+    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+  }
+
+  const text = await res.text();
+  return text ? (JSON.parse(text) as T) : ({} as T);
+}
+
 // ─────────────────────────────────────────
 // Auth
 // ─────────────────────────────────────────
 
 export interface TokenResponse {
   access_token: string;
-  refresh_token: string;
 }
 
 /** POST /auth/login — JSON body (백엔드 LoginRequest 기준) */
@@ -128,6 +144,7 @@ export async function loginApi(username: string, password: string): Promise<Toke
   const res = await fetch(`${BASE}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify({ username, password }),
   });
   if (!res.ok) {
@@ -137,6 +154,11 @@ export async function loginApi(username: string, password: string): Promise<Toke
     throw new Error("로그인 실패");
   }
   return res.json();
+}
+
+/** POST /auth/logout — 서버 측 refresh_token 쿠키 삭제 */
+export async function logoutApi(): Promise<void> {
+  await fetch(`${BASE}/auth/logout`, { method: "POST", credentials: "include" });
 }
 
 /** POST /auth/find-username — phone_token으로 가입 아이디 찾기 */
@@ -238,6 +260,7 @@ export async function registerApi(payload: {
   const res = await fetch(`${BASE}/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
@@ -285,20 +308,10 @@ export async function uploadPhoto(
   slot: 1 | 2,
   file: File
 ): Promise<{ photo_url: string }> {
-  const token = getToken();
-  const formData = new FormData();
-  formData.append("slot", String(slot));
-  formData.append("file", file);
-  const res = await fetch(`${BASE}/me/photos/upload`, {
-    method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: formData,
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body?.error?.detail ?? "사진 업로드 실패");
-  }
-  return res.json();
+  const form = new FormData();
+  form.append("slot", String(slot));
+  form.append("file", file);
+  return apiFormFetch("/me/photos/upload", form);
 }
 
 export async function uploadDoc(payload: {
@@ -659,6 +672,11 @@ export async function rejectFriendRequest(friendshipId: number): Promise<{ statu
   return apiFetch(`/friends/${friendshipId}/reject`, { method: "POST" });
 }
 
+/** DELETE /friends/{friendUserId} — 친구 삭제 (양방향) */
+export async function deleteFriend(friendUserId: number): Promise<{ status: string }> {
+  return apiFetch(`/friends/${friendUserId}`, { method: "DELETE" });
+}
+
 // ─────────────────────────────────────────
 // Invitations (미팅 초대)
 // ─────────────────────────────────────────
@@ -882,6 +900,11 @@ export async function getMyAfterRequests(): Promise<{ items: AfterRequestItem[] 
   return apiFetch("/me/after-requests");
 }
 
+/** DELETE /me/after-requests/{id} — 애프터 신청 삭제 */
+export async function deleteAfterRequest(id: number): Promise<{ status: string }> {
+  return apiFetch(`/me/after-requests/${id}`, { method: "DELETE" });
+}
+
 /** DELETE /me — 회원 탈퇴 (잔액 0 필요) */
 export async function deleteAccount(): Promise<{ status: string }> {
   return apiFetch("/me", { method: "DELETE" });
@@ -911,19 +934,9 @@ export async function updateQA(answers: Record<string, string>): Promise<{ statu
 
 /** POST /me/cover/upload — 배경 커버 사진 업로드 */
 export async function uploadCoverPhoto(file: File): Promise<{ cover_url: string }> {
-  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch(`${BASE}/me/cover/upload`, {
-    method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: form,
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail || "업로드 실패");
-  }
-  return res.json();
+  return apiFormFetch("/me/cover/upload", form);
 }
 
 /** GET /me/profile-posts — 내 프로필 게시물 목록 */
@@ -936,20 +949,10 @@ export async function uploadProfilePost(
   file: File,
   caption?: string,
 ): Promise<import("@/types").ProfilePost> {
-  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
   const form = new FormData();
   form.append("file", file);
   if (caption) form.append("caption", caption);
-  const res = await fetch(`${BASE}/me/profile-posts/upload`, {
-    method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: form,
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail || "업로드 실패");
-  }
-  return res.json();
+  return apiFormFetch("/me/profile-posts/upload", form);
 }
 
 /** DELETE /me/profile-posts/{id} — 게시물 삭제 */
@@ -962,20 +965,8 @@ export async function uploadDocFile(
   docType: "ENROLLMENT_CERT" | "STUDENT_ID",
   file: File
 ): Promise<{ id: number; doc_type: string; file_url: string; status: string }> {
-  const token = getToken();
-  const formData = new FormData();
-  formData.append("doc_type", docType);
-  formData.append("file", file);
-
-  const res = await fetch(`${BASE}/me/docs/upload`, {
-    method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: formData,
-  });
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body?.detail ?? `HTTP ${res.status}`);
-  }
-  return res.json();
+  const form = new FormData();
+  form.append("doc_type", docType);
+  form.append("file", file);
+  return apiFormFetch("/me/docs/upload", form);
 }

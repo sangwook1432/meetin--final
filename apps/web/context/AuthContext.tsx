@@ -24,6 +24,7 @@ import {
 import { useRouter } from "next/navigation";
 import {
   loginApi,
+  logoutApi,
   getMe,
   setTokens,
   clearTokens,
@@ -80,12 +81,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (username: string, password: string) => {
     const tokens = await loginApi(username, password);
-    setTokens(tokens.access_token, tokens.refresh_token);
+    setTokens(tokens.access_token);
     const me = await getMe();
     setUser(me);
   }, []);
 
   const logout = useCallback(() => {
+    logoutApi().catch(() => {});
     clearTokens();
     setUser(null);
     router.push("/login");

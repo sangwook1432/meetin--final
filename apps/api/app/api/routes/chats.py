@@ -1,11 +1,32 @@
 import asyncio
+import functools
 import json as _json
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Optional, List
 
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
+
+try:
+    from slowapi import Limiter
+    from slowapi.util import get_remote_address
+    _limiter = Limiter(key_func=get_remote_address)
+    def _rate_limit(limit: str):
+        return _limiter.limit(limit)
+except ImportError:
+    def _rate_limit(limit: str):  # type: ignore[misc]
+        def decorator(func):
+            if asyncio.iscoroutinefunction(func):
+                @functools.wraps(func)
+                async def async_wrapper(*args, **kwargs):
+                    return await func(*args, **kwargs)
+                return async_wrapper
+            @functools.wraps(func)
+            def sync_wrapper(*args, **kwargs):
+                return func(*args, **kwargs)
+            return sync_wrapper
+        return decorator
 
 from sqlalchemy.orm import Session
 from sqlalchemy import select, delete, func, and_, or_
@@ -556,6 +577,14 @@ async def ws_chat(
         if not user or user.verification_status != VerificationStatus.VERIFIED:
             await websocket.close(code=4003, reason="Not verified")
             return
+        if user.is_banned:
+            await websocket.close(code=4003, reason="Banned")
+            return
+        if user.suspended_until:
+            suspended = user.suspended_until if user.suspended_until.tzinfo else user.suspended_until.replace(tzinfo=timezone.utc)
+            if suspended > datetime.now(timezone.utc):
+                await websocket.close(code=4003, reason="Suspended")
+                return
 
         room = db.get(ChatRoom, room_id)
         if not room:
@@ -590,9 +619,11 @@ async def ws_chat(
 # ─── 메시지 전송 ──────────────────────────────────────────────────
 
 @router.post("/chats/{room_id}/messages")
+@_rate_limit("30/minute")
 async def send_message(
     room_id: int,
     payload: ChatSendIn,
+    request: Request,
     db: Session = Depends(get_db),
     user=Depends(require_verified),
 ):

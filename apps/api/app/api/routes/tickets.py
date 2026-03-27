@@ -10,10 +10,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
-from app.core.deps import get_db, require_verified
+from pydantic import BaseModel
+from app.core.deps import get_db, require_verified, require_admin
 from app.models.user import User
 from app.models.ticket_transaction import TicketTransaction, TicketTxType
 from app.models.wallet_transaction import WalletTransaction, TxType
+from app.services.phone import normalize_phone_kr_to_e164, phone_hmac_hash
 
 router = APIRouter()
 
@@ -96,4 +98,73 @@ def purchase_tickets(
         "tickets": db_user.matching_tickets,
         "balance": db_user.balance,
         "purchased": count,
+    }
+
+
+# ─── 관리자 전용 ──────────────────────────────────────────────────
+
+@router.get("/admin/users/search-by-phone")
+def admin_search_user_by_phone(
+    phone: str,
+    db: Session = Depends(get_db),
+    _=Depends(require_admin),
+):
+    """전화번호로 유저 검색 (관리자 전용)."""
+    try:
+        e164 = normalize_phone_kr_to_e164(phone)
+    except ValueError:
+        raise HTTPException(400, "올바른 전화번호 형식이 아닙니다.")
+
+    phash = phone_hmac_hash(e164)
+    user = db.execute(select(User).where(User.phone_hash == phash)).scalar_one_or_none()
+    if not user:
+        raise HTTPException(404, "해당 전화번호로 가입된 유저가 없습니다.")
+
+    return {
+        "id": user.id,
+        "nickname": user.nickname,
+        "username": user.username,
+        "university": user.university,
+        "matching_tickets": user.matching_tickets,
+        "phone_last4": user.phone_last4,
+    }
+
+
+class AdminGrantTicketIn(BaseModel):
+    user_id: int
+    amount: int
+    note: str = "관리자 무상 지급"
+
+
+@router.post("/admin/tickets/grant")
+def admin_grant_tickets(
+    payload: AdminGrantTicketIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_admin),
+):
+    """매칭권 무상 지급 (관리자 전용)."""
+    if payload.amount < 1 or payload.amount > 100:
+        raise HTTPException(400, "지급 수량은 1~100개 사이여야 합니다.")
+
+    user = db.execute(
+        select(User).where(User.id == payload.user_id).with_for_update()
+    ).scalar_one_or_none()
+    if not user:
+        raise HTTPException(404, "유저를 찾을 수 없습니다.")
+
+    user.matching_tickets += payload.amount
+    db.add(TicketTransaction(
+        user_id=user.id,
+        tx_type=TicketTxType.ADMIN_GRANT,
+        amount=payload.amount,
+        tickets_after=user.matching_tickets,
+        note=payload.note,
+    ))
+    db.commit()
+
+    return {
+        "user_id": user.id,
+        "nickname": user.nickname,
+        "matching_tickets": user.matching_tickets,
+        "granted": payload.amount,
     }

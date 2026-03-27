@@ -102,12 +102,12 @@ def _normalize_entry_year(year: int | None) -> int | None:
 @router.post("/meetings")
 def create_meeting(
     meeting_type: MeetingType,
-    title: str | None = None,
-    preferred_universities_raw: str | None = None,
+    title: str | None = Query(default=None, max_length=50),
+    preferred_universities_raw: str | None = Query(default=None, max_length=200),
     preferred_universities_any: bool = True,
     entry_year_min: int | None = None,
     entry_year_max: int | None = None,
-    my_team_universities_raw: str | None = None,
+    my_team_universities_raw: str | None = Query(default=None, max_length=200),
     my_team_universities_any: bool = True,
     my_team_entry_year_min: int | None = None,
     my_team_entry_year_max: int | None = None,

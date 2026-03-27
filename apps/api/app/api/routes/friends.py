@@ -207,6 +207,29 @@ def reject_friend(
     return {"status": "rejected"}
 
 
+@router.delete("/friends/{friend_user_id}")
+def delete_friend(
+    friend_user_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(require_verified),
+):
+    """친구 삭제 — 양방향으로 끊음."""
+    f = db.execute(
+        select(Friendship).where(
+            Friendship.status == FriendStatus.ACCEPTED,
+            or_(
+                (Friendship.requester_id == user.id) & (Friendship.addressee_id == friend_user_id),
+                (Friendship.requester_id == friend_user_id) & (Friendship.addressee_id == user.id),
+            ),
+        )
+    ).scalar_one_or_none()
+    if not f:
+        raise HTTPException(404, "친구 관계를 찾을 수 없습니다.")
+    db.delete(f)
+    db.commit()
+    return {"status": "deleted"}
+
+
 # ─── 미팅 초대 ────────────────────────────────────────────────────
 
 @router.post("/invitations/meeting")

@@ -6,21 +6,18 @@ POST   /me/profile-posts/upload   — 사진 업로드
 PATCH  /me/profile-posts/{id}     — 캡션 수정
 DELETE /me/profile-posts/{id}     — 삭제
 """
-import os
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_user
+from app.core.deps import get_db, get_current_user, require_verified
+from app.core.storage import upload_file, delete_file, compress_image
 from app.models.profile_post import ProfilePost
 from app.models.user import User
 
 router = APIRouter()
-
-UPLOAD_DIR = "/app/uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 _MAGIC: dict[str, bytes] = {
     "jpg":  b"\xff\xd8\xff",
@@ -39,7 +36,7 @@ def _check_magic(content: bytes, ext: str) -> bool:
 @router.get("/me/profile-posts")
 def get_my_profile_posts(
     db: Session = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(require_verified),
 ):
     posts = db.execute(
         select(ProfilePost)
@@ -65,7 +62,7 @@ async def upload_profile_post(
     file: UploadFile = File(...),
     caption: str | None = Form(None),
     db: Session = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(require_verified),
 ):
     count = db.execute(
         select(ProfilePost).where(ProfilePost.user_id == user.id)
@@ -85,14 +82,13 @@ async def upload_profile_post(
     if not _check_magic(content, ext):
         raise HTTPException(400, "파일 내용이 선택한 형식과 일치하지 않습니다.")
 
+    content, ext = compress_image(content, max_px=1200)
     save_name = f"pp_{user.id}_{uuid.uuid4().hex[:12]}.{ext}"
-    save_path = os.path.join(UPLOAD_DIR, save_name)
-    with open(save_path, "wb") as f_out:
-        f_out.write(content)
+    photo_url = upload_file(content, save_name, ext)
 
     post = ProfilePost(
         user_id=user.id,
-        photo_url=f"/uploads/{save_name}",
+        photo_url=photo_url,
         caption=caption[:100] if caption else None,
     )
     db.add(post)
@@ -116,7 +112,7 @@ def update_profile_post_caption(
     post_id: int,
     body: CaptionUpdate,
     db: Session = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(require_verified),
 ):
     post = db.execute(
         select(ProfilePost).where(
@@ -136,7 +132,7 @@ def update_profile_post_caption(
 def delete_profile_post(
     post_id: int,
     db: Session = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(require_verified),
 ):
     post = db.execute(
         select(ProfilePost).where(
@@ -147,13 +143,9 @@ def delete_profile_post(
     if not post:
         raise HTTPException(404, "게시물을 찾을 수 없습니다.")
 
-    # 디스크에서도 삭제 시도
-    try:
-        disk_path = os.path.join(UPLOAD_DIR, os.path.basename(post.photo_url))
-        if os.path.exists(disk_path):
-            os.remove(disk_path)
-    except OSError:
-        pass
+    # R2에서도 삭제
+    key = post.photo_url.rsplit("/", 1)[-1]
+    delete_file(key)
 
     db.delete(post)
     db.commit()
@@ -166,7 +158,7 @@ def delete_profile_post(
 def get_user_profile(
     user_id: int,
     db: Session = Depends(get_db),
-    _=Depends(get_current_user),  # 로그인 필요
+    _=Depends(require_verified),
 ):
     """다른 유저의 공개 프로필 조회."""
     user = db.get(User, user_id)

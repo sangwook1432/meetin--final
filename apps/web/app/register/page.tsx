@@ -128,7 +128,7 @@ export default function RegisterPage() {
         password: form.password,
         phone_token: phoneToken,
       });
-      setTokens(tokens.access_token, tokens.refresh_token);
+      setTokens(tokens.access_token);
       await refreshUser();
       router.replace("/me/profile?onboarding=1");
     } catch (err) {

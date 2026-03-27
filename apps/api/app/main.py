@@ -1,13 +1,11 @@
 from contextlib import asynccontextmanager
 
-import os
-
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
-from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
 
 from app.core.config import settings
 from app.api.router import router
@@ -108,8 +106,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins_list(),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
 )
 
 # ─── Rate Limiting (slowapi) ──────────────────────────────────────
@@ -217,11 +215,6 @@ async def logging_middleware(request: Request, call_next):
 
 
 app.include_router(router)
-
-# ─── 업로드 파일 정적 서빙 ────────────────────────────────────────
-_upload_dir = "/app/uploads"
-os.makedirs(_upload_dir, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=_upload_dir), name="uploads")
 
 
 @app.get("/health")

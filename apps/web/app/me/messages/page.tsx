@@ -6,7 +6,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getMyAfterRequests } from "@/lib/api";
+import { getMyAfterRequests, deleteAfterRequest } from "@/lib/api";
 import { AppShell } from "@/components/ui/AppShell";
 import type { AfterRequestItem } from "@/types";
 
@@ -55,14 +55,27 @@ export default function MessagesPage() {
         ) : (
           <div className="flex flex-col gap-3">
             {items.map((item) => (
-              <div key={item.id} className="rounded-2xl border border-pink-100 bg-pink-50 p-4">
+              <div key={item.id} onClick={() => router.push(`/profile/${item.sender_id}`)} className="rounded-2xl border border-pink-100 bg-pink-50 p-4 cursor-pointer active:opacity-80">
                 <div className="mb-2 flex items-center justify-between">
                   <p className="text-sm font-bold text-pink-800">
                     💌 {item.sender_nickname || "익명"}님의 애프터 신청
                   </p>
-                  <p className="text-xs text-gray-400">
-                    {new Date(item.created_at).toLocaleDateString("ko-KR")}
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-gray-400">
+                      {new Date(item.created_at).toLocaleDateString("ko-KR")}
+                    </p>
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        await deleteAfterRequest(item.id);
+                        setItems((prev) => prev.filter((x) => x.id !== item.id));
+                      }}
+                      className="text-gray-300 hover:text-gray-500 text-base leading-none"
+                      title="삭제"
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
                 <p className="text-sm text-gray-700 leading-relaxed">{item.message}</p>
                 <div className="mt-3 flex items-center gap-2 rounded-xl border border-pink-200 bg-white px-3 py-2">

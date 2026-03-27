@@ -4,7 +4,7 @@
  * (admin 페이지에서 직접 사용)
  */
 
-import { getToken, getRefreshToken, setTokens, clearTokens } from "@/lib/api";
+import { getToken, setTokens, clearTokens } from "@/lib/api";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -13,17 +13,14 @@ let _refreshing: Promise<boolean> | null = null;
 async function _tryRefresh(): Promise<boolean> {
   if (_refreshing) return _refreshing;
   _refreshing = (async () => {
-    const rt = getRefreshToken();
-    if (!rt) return false;
     try {
       const res = await fetch(`${BASE}/auth/refresh`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh_token: rt }),
+        credentials: "include",
       });
       if (!res.ok) return false;
       const data = await res.json();
-      setTokens(data.access_token, data.refresh_token);
+      setTokens(data.access_token);
       return true;
     } catch {
       return false;
@@ -63,4 +60,30 @@ export async function apiFetch<T>(
 
   const text = await res.text();
   return text ? (JSON.parse(text) as T) : ({} as T);
+}
+
+// ─── 매칭권 무상 지급 ─────────────────────────────────────────────
+
+export interface TicketGrantUserInfo {
+  id: number;
+  nickname: string | null;
+  username: string | null;
+  university: string | null;
+  matching_tickets: number;
+  phone_last4: string;
+}
+
+export async function adminSearchUserByPhone(phone: string): Promise<TicketGrantUserInfo> {
+  return apiFetch(`/admin/users/search-by-phone?phone=${encodeURIComponent(phone)}`);
+}
+
+export async function adminGrantTickets(
+  userId: number,
+  amount: number,
+  note: string,
+): Promise<{ user_id: number; nickname: string | null; matching_tickets: number; granted: number }> {
+  return apiFetch("/admin/tickets/grant", {
+    method: "POST",
+    body: JSON.stringify({ user_id: userId, amount, note }),
+  });
 }

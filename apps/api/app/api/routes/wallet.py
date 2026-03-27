@@ -8,11 +8,14 @@ wallet.py — 잔액 관리 + 결제 내역
   - 잔액 조회: GET  /wallet/me
   - 거래 내역: GET  /wallet/transactions
 """
+import logging
 import uuid
 import base64
 from typing import Optional
 
 import functools
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Query
 from pydantic import BaseModel, Field
@@ -35,7 +38,7 @@ except ImportError:
         return decorator
 
 from app.core.config import settings
-from app.core.deps import get_db, require_verified, require_admin
+from app.core.deps import get_db, require_verified, require_verified_financial, require_admin
 from app.models.user import User
 from app.models.wallet_transaction import WalletTransaction, TxType # 경로가 다르면 맞게 수정하세요
 
@@ -159,7 +162,9 @@ def forfeit_ticket(db: Session, user: User, meeting_id: int) -> None:
 # ─── 잔액 충전 준비 (Toss 주문 생성) ─────────────────────────────
 
 @router.post("/wallet/charge/prepare")
+@_rate_limit("10/minute")
 def prepare_charge(
+    request: Request,
     amount: int,
     db: Session = Depends(get_db),
     user=Depends(require_verified),
@@ -178,7 +183,9 @@ def prepare_charge(
 # ─── 잔액 충전 확정 (Toss 결제 성공 콜백) ─────────────────────────
 
 @router.post("/wallet/charge/confirm")
+@_rate_limit("10/minute")
 def confirm_charge(
+    request: Request,
     payload: ChargeIn,
     db: Session = Depends(get_db),
     user=Depends(require_verified),
@@ -205,7 +212,7 @@ def confirm_charge(
         creds = base64.b64encode(f"{settings.toss_secret_key}:".encode()).decode()
         import httpx
         try:
-            print(f"🔍 Toss confirm 요청: paymentKey={payload.payment_key!r}, orderId={payload.order_id!r}, amount={payload.amount}")
+            logger.info("Toss confirm request: orderId=%s, amount=%s", payload.order_id, payload.amount)
             resp = httpx.post(
                 "https://api.tosspayments.com/v1/payments/confirm",
                 headers={"Authorization": f"Basic {creds}", "Content-Type": "application/json"},
@@ -213,7 +220,7 @@ def confirm_charge(
                 timeout=10.0,
             )
             if resp.status_code != 200:
-                print("🚨 토스가 거절한 이유:", resp.text)
+                logger.warning("Toss payment rejected: %s", resp.text)
                 data = resp.json()
                 raise HTTPException(400, data.get("message", "Toss 결제 실패"))
             # Toss 응답의 실제 승인 금액이 요청 금액과 일치하는지 서버에서도 검증
@@ -253,7 +260,7 @@ def confirm_charge(
 @router.get("/wallet/me")
 def my_wallet(
     db: Session = Depends(get_db),
-    user=Depends(require_verified),
+    user=Depends(require_verified_financial),
 ):
     return {
         "balance": user.balance,
@@ -266,10 +273,10 @@ def my_wallet(
 
 @router.get("/wallet/transactions")
 def wallet_transactions(
-    limit: int = 50,
-    offset: int = 0,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    user=Depends(require_verified),
+    user=Depends(require_verified_financial),
 ):
     txs = db.execute(
         select(WalletTransaction)
@@ -300,7 +307,7 @@ def wallet_transactions(
 # ─── 계좌 조회 ────────────────────────────────────────────────────
 
 @router.get("/me/bank-account")
-def get_bank_account(user=Depends(require_verified)):
+def get_bank_account(user=Depends(require_verified_financial)):
     return {
         "bank_name": user.bank_name,
         "account_number": user.account_number,
@@ -314,7 +321,7 @@ def get_bank_account(user=Depends(require_verified)):
 def update_bank_account(
     payload: BankAccountIn,
     db: Session = Depends(get_db),
-    user=Depends(require_verified),
+    user=Depends(require_verified_financial),
 ):
     if not payload.bank_name.strip():
         raise HTTPException(400, "은행명을 입력해주세요.")
@@ -394,10 +401,12 @@ def _parse_fee_net(note: str | None, fallback_amount: int) -> tuple[int, int]:
 
 
 @router.get("/wallet/withdraw/preview")
+@_rate_limit("30/minute")
 def withdraw_preview(
+    request: Request,
     amount: int = Query(..., gt=0),
     db: Session = Depends(get_db),
-    user=Depends(require_verified),
+    user=Depends(require_verified_financial),
 ):
     """출금 전 수수료 미리보기."""
     is_ck = _is_cheongyak(db, user.id)
@@ -418,7 +427,7 @@ def request_withdraw(
     request: Request,
     payload: WithdrawIn,
     db: Session = Depends(get_db),
-    user=Depends(require_verified),
+    user=Depends(require_verified_financial),
 ):
     """
     잔액 출금 신청.
@@ -475,8 +484,8 @@ def request_withdraw(
 
 @router.get("/admin/withdrawals")
 def list_withdrawals(
-    limit: int = 50,
-    offset: int = 0,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     _=Depends(require_admin),
 ):
@@ -591,7 +600,7 @@ def reject_withdrawal(
         select(WalletTransaction).where(
             WalletTransaction.id == tx_id,
             WalletTransaction.tx_type == TxType.WITHDRAW,
-        )
+        ).with_for_update()
     ).scalar_one_or_none()
 
     if not tx:

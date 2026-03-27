@@ -11,12 +11,14 @@ import ErrorBanner from "@/components/ui/ErrorBanner";
  */
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   listFriends,
   pendingFriendRequests,
   sendFriendRequest,
   acceptFriendRequest,
   rejectFriendRequest,
+  deleteFriend,
   type FriendItem,
 } from "@/lib/api";
 import { AppShell } from "@/components/ui/AppShell";
@@ -42,12 +44,14 @@ const GENDER_LABELS: Record<string, string> = {
 };
 
 export default function FriendsPage() {
+  const router = useRouter();
   const [tab, setTab] = useState<TabId>("list");
 
   // 내 친구
   const [friends, setFriends] = useState<FriendItem[]>([]);
   const [friendsLoading, setFriendsLoading] = useState(true);
   const [friendsError, setFriendsError] = useState<string | null>(null);
+  const [menuOpenId, setMenuOpenId] = useState<number | null>(null);
 
   // 받은 요청
   const [pending, setPending] = useState<PendingRequest[]>([]);
@@ -181,25 +185,62 @@ export default function FriendsPage() {
                   return (
                     <div
                       key={f.id}
-                      className="flex items-center gap-3 rounded-xl bg-white border border-gray-100 px-4 py-3 shadow-sm"
+                      className="relative flex items-center gap-3 rounded-xl bg-white border border-gray-100 px-4 py-3 shadow-sm"
                     >
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-xl">
-                        {f.gender === "MALE" ? "👨" : f.gender === "FEMALE" ? "👩" : "👤"}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-800 truncate">
-                          {f.nickname ?? "이름 없음"}
-                          {f.gender && (
-                            <span className="ml-1.5 text-xs text-gray-400">{GENDER_LABELS[f.gender]}</span>
-                          )}
-                        </p>
-                        <p className="text-xs text-gray-400 truncate">
-                          {f.university ?? "학교 미입력"} · 끝번호 {f.phone_last4}
-                        </p>
+                      <div
+                        onClick={() => router.push(`/profile/${f.id}`)}
+                        className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
+                      >
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xl">
+                          {f.gender === "MALE" ? "👨" : f.gender === "FEMALE" ? "👩" : "👤"}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-800 truncate">
+                            {f.nickname ?? "이름 없음"}
+                            {f.gender && (
+                              <span className="ml-1.5 text-xs text-gray-400">{GENDER_LABELS[f.gender]}</span>
+                            )}
+                          </p>
+                          <p className="text-xs text-gray-400 truncate">
+                            {f.university ?? "학교 미입력"} · 끝번호 {f.phone_last4}
+                          </p>
+                        </div>
                       </div>
                       <span className={`text-xs font-medium ${verifyCfg.className}`}>
                         {verifyCfg.label}
                       </span>
+                      {/* 말줄임표 메뉴 */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMenuOpenId(menuOpenId === f.id ? null : f.id);
+                        }}
+                        className="ml-1 p-1 text-gray-400 hover:text-gray-600 rounded"
+                      >
+                        ⋮
+                      </button>
+                      {menuOpenId === f.id && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-10"
+                            onClick={() => setMenuOpenId(null)}
+                          />
+                          <div className="absolute right-2 top-10 z-20 rounded-lg border border-gray-100 bg-white shadow-lg py-1 min-w-[100px]">
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                if (!confirm(`${f.nickname ?? "이 친구"}를 삭제할까요?`)) return;
+                                await deleteFriend(f.id);
+                                setFriends((prev) => prev.filter((x) => x.id !== f.id));
+                                setMenuOpenId(null);
+                              }}
+                              className="w-full px-4 py-2 text-left text-sm text-red-500 hover:bg-red-50"
+                            >
+                              친구 삭제
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
                   );
                 })}

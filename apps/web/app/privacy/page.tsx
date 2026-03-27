@@ -28,6 +28,7 @@ export default function PrivacyPage() {
                 <ul className="list-disc pl-5 space-y-1 text-gray-600">
                   <li>이메일 주소</li>
                   <li>휴대폰 번호 (HMAC 암호화 저장, 뒷 4자리만 평문 보관)</li>
+                  <li>실명 (휴대폰 본인인증을 통해 수집)</li>
                   <li>비밀번호 (단방향 암호화 저장)</li>
                 </ul>
               </div>
@@ -36,14 +37,17 @@ export default function PrivacyPage() {
                 <ul className="list-disc pl-5 space-y-1 text-gray-600">
                   <li>닉네임, 성별, 나이</li>
                   <li>대학교, 학과, 학번(입학연도)</li>
-                  <li>프로필 사진 (최대 2장)</li>
+                  <li>선호 지역 (선택)</li>
                   <li>자기소개 (선택)</li>
+                  <li>닮은꼴 정보 (선택)</li>
+                  <li>10문10답 답변 (선택)</li>
+                  <li>프로필 사진 (최대 2장), 커버 사진 (선택), 프로필 게시물 사진 (최대 30장, 선택)</li>
                 </ul>
               </div>
               <div>
                 <p className="font-semibold text-gray-800 mb-1">③ 재학 인증 시</p>
                 <ul className="list-disc pl-5 space-y-1 text-gray-600">
-                  <li>재학증명서 또는 학생증 사진</li>
+                  <li>재학증명서 또는 학생증 사진 (인증 처리 완료 즉시 삭제)</li>
                 </ul>
               </div>
               <div>
@@ -54,11 +58,19 @@ export default function PrivacyPage() {
                 </ul>
               </div>
               <div>
-                <p className="font-semibold text-gray-800 mb-1">⑤ 서비스 이용 과정에서 자동 수집</p>
+                <p className="font-semibold text-gray-800 mb-1">⑤ 애프터 신청 시</p>
+                <ul className="list-disc pl-5 space-y-1 text-gray-600">
+                  <li>애프터 신청 메시지</li>
+                  <li>신청인의 휴대폰 번호 — 수신인에게 복호화된 형태로 제공됩니다. 애프터 신청 기능 이용 시 이에 동의한 것으로 간주합니다.</li>
+                </ul>
+              </div>
+              <div>
+                <p className="font-semibold text-gray-800 mb-1">⑥ 서비스 이용 과정에서 자동 수집</p>
                 <ul className="list-disc pl-5 space-y-1 text-gray-600">
                   <li>서비스 이용 기록, 접속 로그</li>
                   <li>채팅 메시지 내용</li>
                   <li>미팅 참여 및 평가 내역</li>
+                  <li>신고 내역</li>
                 </ul>
               </div>
             </div>
@@ -72,9 +84,11 @@ export default function PrivacyPage() {
               <li>③ 미팅 매칭 및 상대방 프로필 제공</li>
               <li>④ 서비스 내 채팅 기능 제공</li>
               <li>⑤ 지갑 잔액 충전 및 매칭권 결제, 환불 처리</li>
-              <li>⑥ 고객 문의 처리 및 분쟁 해결</li>
-              <li>⑦ 불법·부적절한 이용 방지 및 서비스 안정성 확보</li>
-              <li>⑧ 서비스 개선 및 신규 기능 개발 (통계 분석, 익명 처리 후 활용)</li>
+              <li>⑥ 애프터 신청 기능 제공 (신청인 전화번호 수신인 전달)</li>
+              <li>⑦ 친구 기능 제공 (상호 동의 기반 연결)</li>
+              <li>⑧ 고객 문의 처리 및 분쟁 해결</li>
+              <li>⑨ 불법·부적절한 이용 방지 및 서비스 안정성 확보</li>
+              <li>⑩ 서비스 개선 및 신규 기능 개발 (통계 분석, 익명 처리 후 활용)</li>
             </ul>
           </div>
 
@@ -124,6 +138,7 @@ export default function PrivacyPage() {
                 </ul>
               </li>
               <li>③ 미팅 매칭이 성사된 경우, 상대방 팀에게 프로필 정보(닉네임, 대학교, 사진 등)가 공개됩니다. 이는 서비스의 본질적 기능으로, 가입 시 동의한 것으로 간주됩니다.</li>
+              <li>④ 애프터 신청 기능을 이용하는 경우, 신청인의 휴대폰 번호가 수신인에게 제공됩니다. 신청 버튼을 누르는 시점에 이에 동의한 것으로 간주합니다.</li>
             </ul>
           </div>
 
@@ -146,6 +161,14 @@ export default function PrivacyPage() {
                     <td className="border border-gray-200 px-3 py-2">Solapi (솔라피)</td>
                     <td className="border border-gray-200 px-3 py-2">SMS 인증 발송</td>
                   </tr>
+                  <tr>
+                    <td className="border border-gray-200 px-3 py-2">Cloudflare, Inc.</td>
+                    <td className="border border-gray-200 px-3 py-2">이미지 파일 저장 (Cloudflare R2)</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-gray-200 px-3 py-2">Sentry (Functional Software, Inc.)</td>
+                    <td className="border border-gray-200 px-3 py-2">서버 오류 모니터링</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -157,7 +180,8 @@ export default function PrivacyPage() {
               <li>① 보유 기간이 경과하거나 처리 목적이 달성된 개인정보는 지체 없이 파기합니다.</li>
               <li>② 전자 파일 형태의 정보는 복구 불가능한 방법으로 영구 삭제합니다.</li>
               <li>③ 종이 문서는 분쇄기로 분쇄하여 파기합니다.</li>
-              <li>④ 재학 인증을 위해 수집된 재학증명서 또는 학생증 사진은 관리자의 승인(APPROVE) 또는 거절(REJECT) 처리가 완료되는 즉시 서버에서 영구 삭제됩니다.</li>
+              <li>④ 재학 인증을 위해 수집된 재학증명서 또는 학생증 사진은 관리자의 승인 또는 거절 처리가 완료되는 즉시 서버에서 영구 삭제됩니다.</li>
+              <li>⑤ 프로필 사진, 커버 사진, 게시물 사진은 회원 탈퇴 시 Cloudflare R2 스토리지에서 삭제됩니다.</li>
             </ul>
           </div>
 
@@ -173,10 +197,11 @@ export default function PrivacyPage() {
           <div>
             <h2 className="mb-3 text-base font-bold text-gray-900">제8조 (개인정보 보호 조치)</h2>
             <ul className="space-y-2 list-none">
-              <li>① 휴대폰 번호는 HMAC-SHA256으로 암호화하여 저장하며, 원문은 AES-256으로 암호화 보관합니다.</li>
+              <li>① 휴대폰 번호는 HMAC-SHA256으로 암호화하여 저장하며, 원문은 AES-256(Fernet)으로 암호화 보관합니다.</li>
               <li>② 비밀번호는 bcrypt 단방향 해시로 저장하여 운영자도 원문을 알 수 없습니다.</li>
               <li>③ 서비스와 API 간 통신은 HTTPS(TLS)로 암호화됩니다.</li>
               <li>④ 개인정보에 대한 접근 권한은 최소한의 인원으로 제한합니다.</li>
+              <li>⑤ 업로드된 이미지 파일은 외부 클라우드 스토리지(Cloudflare R2)에 저장되며, 공개 URL을 통해 접근 가능합니다.</li>
             </ul>
           </div>
 

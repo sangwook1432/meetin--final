@@ -252,3 +252,18 @@ def get_my_after_requests(
         })
 
     return {"items": result}
+
+
+@router.delete("/me/after-requests/{request_id}")
+def delete_after_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_verified),
+):
+    """수신된 애프터 신청 삭제."""
+    req = db.get(AfterRequest, request_id)
+    if not req or req.receiver_id != current_user.id:
+        raise HTTPException(404, "애프터 신청을 찾을 수 없습니다.")
+    db.delete(req)
+    db.commit()
+    return {"status": "deleted"}

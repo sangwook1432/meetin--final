@@ -45,6 +45,26 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+def require_verified_financial(user: User = Depends(get_current_user)) -> User:
+    """잔액 조회/출금 전용 — 재학 인증은 필요하지만 밴/정지 중에도 허용."""
+    if user.verification_status == VerificationStatus.PENDING:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="관리자 승인 대기 중입니다. 승인 완료 후 이용 가능합니다.",
+        )
+    if user.verification_status == VerificationStatus.REJECTED:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="재학 인증이 거절되었습니다. 서류를 다시 제출해주세요.",
+        )
+    if user.verification_status != VerificationStatus.VERIFIED:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="재학 인증이 필요합니다.",
+        )
+    return user
+
+
 def require_verified(user: User = Depends(get_current_user)) -> User:
     if user.verification_status == VerificationStatus.PENDING:
         raise HTTPException(

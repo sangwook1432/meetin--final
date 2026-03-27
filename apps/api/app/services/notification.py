@@ -127,11 +127,11 @@ class NotificationService:
         nickname = getattr(user, "nickname", None) or "회원"
         await _send_alimtalk(
             phone=phone,
-            template_code=getattr(settings, "kakao_template_waiting_confirm", "MEETIN_WAIT"),
+            template_code="MEETIN_WAIT",
             template_args={
                 "nickname": nickname,
                 "meeting_id": str(meeting_id),
-                "app_url": f"https://meetin.kr/meetings/{meeting_id}",
+                "app_url": f"https://meetinapp.com/meetings/{meeting_id}",
             },
         )
         logger.info("[NOTIFY] waiting_confirm user=%d meeting=%d", user.id, meeting_id)
@@ -147,11 +147,11 @@ class NotificationService:
         nickname = getattr(user, "nickname", None) or "회원"
         await _send_alimtalk(
             phone=phone,
-            template_code=getattr(settings, "kakao_template_confirmed", "MEETIN_CONF"),
+            template_code="MEETIN_CONF",
             template_args={
                 "nickname": nickname,
                 "meeting_id": str(meeting_id),
-                "chat_url": f"https://meetin.kr/chats/{chat_room_id}",
+                "chat_url": f"https://meetinapp.com/chats/{chat_room_id}",
             },
         )
         logger.info("[NOTIFY] confirmed user=%d meeting=%d room=%d", user.id, meeting_id, chat_room_id)
@@ -167,7 +167,7 @@ class NotificationService:
         nickname = getattr(user, "nickname", None) or "회원"
         await _send_alimtalk(
             phone=phone,
-            template_code=getattr(settings, "kakao_template_refunded", "MEETIN_RFND"),
+            template_code="MEETIN_RFND",
             template_args={
                 "nickname": nickname,
                 "amount": f"{amount:,}",
@@ -187,7 +187,7 @@ class NotificationService:
         nickname = getattr(user, "nickname", None) or "회원"
         await _send_alimtalk(
             phone=phone,
-            template_code=getattr(settings, "kakao_template_forfeited", "MEETIN_FORF"),
+            template_code="MEETIN_FORF",
             template_args={
                 "nickname": nickname,
                 "amount": f"{amount:,}",

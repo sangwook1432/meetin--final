@@ -1,7 +1,7 @@
 import re
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -20,7 +20,6 @@ from app.schemas.auth import (
     RegisterRequest,
     LoginRequest,
     TokenResponse,
-    RefreshRequest,
     PhoneSendRequest,
     PhoneVerifyRequest,
     PhoneVerifyResponse,
@@ -31,6 +30,23 @@ from app.core.crypto import encrypt_phone
 import app.services.pass_auth as pass_auth
 
 router = APIRouter()
+
+_REFRESH_COOKIE = "refresh_token"
+_REFRESH_MAX_AGE = 14 * 24 * 60 * 60  # 14일 (초)
+
+
+def _set_refresh_cookie(response: Response, token: str) -> None:
+    """Refresh Token을 HttpOnly 쿠키로 설정."""
+    from app.core.config import settings
+    response.set_cookie(
+        key=_REFRESH_COOKIE,
+        value=token,
+        httponly=True,
+        secure=(settings.env != "local"),
+        samesite="lax",
+        max_age=_REFRESH_MAX_AGE,
+        path="/auth",
+    )
 
 
 # ─── Rate Limiter ─────────────────────────────────────────────────
@@ -136,7 +152,7 @@ async def phone_token_info(token: str = Query(...)):
 
 @router.post("/register", response_model=TokenResponse)
 @_rate_limit("10/minute")
-async def register(request: Request, payload: RegisterRequest, db: Session = Depends(get_db)):
+async def register(request: Request, response: Response, payload: RegisterRequest, db: Session = Depends(get_db)):
     username = payload.username  # field_validator에서 이미 lower() 처리됨
 
     if db.query(User).filter(User.username == username).first():
@@ -202,29 +218,30 @@ async def register(request: Request, payload: RegisterRequest, db: Session = Dep
     db.commit()
     db.refresh(user)
 
-    return TokenResponse(
-        access_token=create_access_token(user.id),
-        refresh_token=create_refresh_token(user.id),
-    )
+    access_token = create_access_token(user.id)
+    _set_refresh_cookie(response, create_refresh_token(user.id))
+    return TokenResponse(access_token=access_token)
 
 
 @router.post("/login", response_model=TokenResponse)
 @_rate_limit("10/minute")
-def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)):
+def login(request: Request, response: Response, payload: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == payload.username.lower().strip()).first()
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="아이디 또는 비밀번호가 올바르지 않습니다.")
 
-    return TokenResponse(
-        access_token=create_access_token(user.id),
-        refresh_token=create_refresh_token(user.id),
-    )
+    _set_refresh_cookie(response, create_refresh_token(user.id))
+    return TokenResponse(access_token=create_access_token(user.id))
 
 
 @router.post("/refresh", response_model=TokenResponse)
-def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
+def refresh(request: Request, response: Response, db: Session = Depends(get_db)):
+    rt = request.cookies.get(_REFRESH_COOKIE)
+    if not rt:
+        raise HTTPException(status_code=401, detail="No refresh token")
+
     try:
-        decoded = decode_token(payload.refresh_token)
+        decoded = decode_token(rt)
     except ValueError:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
 
@@ -239,10 +256,14 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
 
-    return TokenResponse(
-        access_token=create_access_token(user.id),
-        refresh_token=create_refresh_token(user.id),
-    )
+    _set_refresh_cookie(response, create_refresh_token(user.id))
+    return TokenResponse(access_token=create_access_token(user.id))
+
+
+@router.post("/logout")
+def logout(response: Response):
+    response.delete_cookie(key=_REFRESH_COOKIE, path="/auth")
+    return {"status": "ok"}
 
 
 # ─── 비밀번호 찾기 ────────────────────────────────────────────────

@@ -1,21 +1,18 @@
 import json
-import os
 import uuid
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_user
+from app.core.deps import get_db, get_current_user, require_verified
 from app.models.user import User
 from app.models.verification_doc import VerificationDoc, DocType
 from app.core.crypto import decrypt_phone
+from app.core.storage import upload_file, compress_image
 from app.schemas.user import UserPublic, ProfileUpdateRequest
 from app.schemas.verification import DocUploadRequest, VerificationDocOut
 
 router = APIRouter()
-
-UPLOAD_DIR = "/app/uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # magic bytes: 확장자 위조 방지
 _MAGIC: dict[str, bytes] = {
@@ -56,7 +53,7 @@ _PROFILE_ALLOWED_FIELDS = {
 def update_profile(
     payload: ProfileUpdateRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified),
 ):
     data = payload.model_dump(exclude_unset=True)
     for k, v in data.items():
@@ -75,7 +72,7 @@ async def upload_photo(
     slot: int = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified),
 ):
     """프로필 사진 업로드. slot=1 또는 2."""
     if slot not in (1, 2):
@@ -93,12 +90,9 @@ async def upload_photo(
     if not _check_magic(content, ext):
         raise HTTPException(400, "파일 내용이 선택한 형식과 일치하지 않습니다.")
 
+    content, ext = compress_image(content, max_px=1000)
     save_name = f"photo_{user.id}_{slot}_{uuid.uuid4().hex[:8]}.{ext}"
-    save_path = os.path.join(UPLOAD_DIR, save_name)
-    with open(save_path, "wb") as f_out:
-        f_out.write(content)
-
-    photo_url = f"/uploads/{save_name}"
+    photo_url = upload_file(content, save_name, ext)
     if slot == 1:
         user.photo_url_1 = photo_url
     else:
@@ -113,7 +107,7 @@ async def upload_photo(
 async def upload_cover(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified),
 ):
     """배경 커버 사진 업로드."""
     filename = file.filename or ""
@@ -128,12 +122,9 @@ async def upload_cover(
     if not _check_magic(content, ext):
         raise HTTPException(400, "파일 내용이 선택한 형식과 일치하지 않습니다.")
 
+    content, ext = compress_image(content, max_px=1200)
     save_name = f"cover_{user.id}_{uuid.uuid4().hex[:8]}.{ext}"
-    save_path = os.path.join(UPLOAD_DIR, save_name)
-    with open(save_path, "wb") as f_out:
-        f_out.write(content)
-
-    user.cover_url = f"/uploads/{save_name}"
+    user.cover_url = upload_file(content, save_name, ext)
     db.add(user)
     db.commit()
 
@@ -148,7 +139,7 @@ class QAUpdateRequest(BaseModel):
 def update_qa(
     body: QAUpdateRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified),
 ):
     """10문 10답 답변 저장. answers: {\"1\": \"...\", ..., \"10\": \"...\"}"""
     # 1~10 키만 허용, 답변 최대 100자
@@ -244,7 +235,6 @@ async def upload_doc_file(
 
     # 파일 저장
     save_name = f"{user.id}_{uuid.uuid4().hex[:8]}.{ext}"
-    save_path = os.path.join(UPLOAD_DIR, save_name)
     content = await file.read()
     if len(content) > 10 * 1024 * 1024:  # 10MB 제한
         raise HTTPException(400, "파일 크기는 10MB를 초과할 수 없습니다.")
@@ -252,10 +242,7 @@ async def upload_doc_file(
     if not _check_magic(content, ext):
         raise HTTPException(400, "파일 내용이 선택한 형식과 일치하지 않습니다.")
 
-    with open(save_path, "wb") as f_out:
-        f_out.write(content)
-
-    file_url = f"/uploads/{save_name}"
+    file_url = upload_file(content, save_name, ext)
 
     doc = VerificationDoc(
         user_id=user.id,

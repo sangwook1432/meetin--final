@@ -10,7 +10,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { apiFetch } from "@/lib/adminApi";
+import { apiFetch, adminSearchUserByPhone, adminGrantTickets, type TicketGrantUserInfo } from "@/lib/adminApi";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -123,7 +123,7 @@ export default function AdminPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
 
-  const [tab, setTab] = useState<"verify" | "withdraw" | "complaints" | "preregister" | "reports">("verify");
+  const [tab, setTab] = useState<"verify" | "withdraw" | "complaints" | "preregister" | "reports" | "tickets">("verify");
 
   // ── 재학증명서 심사 상태 ──────────────────────────────────────
   const [stats, setStats] = useState<Stats>({});
@@ -420,6 +420,14 @@ export default function AdminPage() {
                 {reports.filter(r => r.status === "PENDING").length}
               </span>
             )}
+          </button>
+          <button
+            onClick={() => setTab("tickets")}
+            className={`rounded-xl px-5 py-2.5 text-sm font-bold transition-all ${
+              tab === "tickets" ? "bg-white shadow text-gray-900" : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            🎟 매칭권 지급
           </button>
         </div>
       </div>
@@ -989,6 +997,9 @@ export default function AdminPage() {
         </div>
       )}
 
+      {/* ── 탭: 매칭권 지급 ──────────────────────────────────────── */}
+      {tab === "tickets" && <TicketGrantTab />}
+
       {/* ── 탭 2: 출금 신청 관리 ─────────────────────────────────── */}
       {tab === "withdraw" && (
         <div className="max-w-6xl mx-auto px-6 py-6">
@@ -1082,6 +1093,132 @@ export default function AdminPage() {
                 </div>
               ))}
             </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── 매칭권 지급 탭 컴포넌트 ─────────────────────────────────────
+
+function TicketGrantTab() {
+  const [phone, setPhone] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [foundUser, setFoundUser] = useState<TicketGrantUserInfo | null>(null);
+  const [amount, setAmount] = useState(1);
+  const [note, setNote] = useState("관리자 무상 지급");
+  const [granting, setGranting] = useState(false);
+  const [grantResult, setGrantResult] = useState<string | null>(null);
+
+  async function handleSearch() {
+    setSearchError(null);
+    setFoundUser(null);
+    setGrantResult(null);
+    setSearching(true);
+    try {
+      const res = await adminSearchUserByPhone(phone.trim());
+      setFoundUser(res);
+    } catch (e) {
+      setSearchError(e instanceof Error ? e.message : "검색 실패");
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  async function handleGrant() {
+    if (!foundUser) return;
+    setGranting(true);
+    setGrantResult(null);
+    try {
+      const res = await adminGrantTickets(foundUser.id, amount, note);
+      setGrantResult(`✅ ${res.nickname ?? foundUser.id}님에게 매칭권 ${res.granted}개 지급 완료 (보유: ${res.matching_tickets}개)`);
+      setFoundUser({ ...foundUser, matching_tickets: res.matching_tickets });
+    } catch (e) {
+      setGrantResult(`❌ ${e instanceof Error ? e.message : "지급 실패"}`);
+    } finally {
+      setGranting(false);
+    }
+  }
+
+  return (
+    <div className="max-w-lg mx-auto px-6 py-6">
+      <h2 className="text-base font-bold text-gray-900 mb-1">매칭권 무상 지급</h2>
+      <p className="text-xs text-gray-400 mb-6">전화번호로 유저를 검색한 후 매칭권을 지급하세요.</p>
+
+      {/* 전화번호 검색 */}
+      <div className="flex gap-2 mb-4">
+        <input
+          type="text"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+          placeholder="01012345678"
+          className="flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-400"
+        />
+        <button
+          onClick={handleSearch}
+          disabled={searching || !phone.trim()}
+          className="rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+        >
+          {searching ? "검색 중..." : "검색"}
+        </button>
+      </div>
+
+      {searchError && (
+        <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600 mb-4">
+          {searchError}
+        </div>
+      )}
+
+      {/* 유저 정보 */}
+      {foundUser && (
+        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-bold text-gray-900">{foundUser.nickname ?? "닉네임 없음"}</p>
+              <p className="text-xs text-gray-400">{foundUser.university ?? "학교 미입력"} · 끝번호 {foundUser.phone_last4}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-gray-400">현재 보유</p>
+              <p className="text-lg font-black text-blue-600">{foundUser.matching_tickets}개</p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-semibold text-gray-500 mb-1 block">지급 수량</label>
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={amount}
+                onChange={(e) => setAmount(Number(e.target.value))}
+                className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-400"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 mb-1 block">사유</label>
+              <input
+                type="text"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-400"
+              />
+            </div>
+          </div>
+
+          <button
+            onClick={handleGrant}
+            disabled={granting || amount < 1}
+            className="w-full rounded-xl bg-blue-500 py-3 text-sm font-bold text-white disabled:opacity-50"
+          >
+            {granting ? "지급 중..." : `매칭권 ${amount}개 지급`}
+          </button>
+
+          {grantResult && (
+            <p className="text-sm text-center font-medium text-gray-700">{grantResult}</p>
           )}
         </div>
       )}

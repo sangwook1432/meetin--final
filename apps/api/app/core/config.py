@@ -40,12 +40,6 @@ class Settings(BaseSettings):
     # ─── 카카오 알림톡 ────────────────────────────────────────────
     kakao_api_key: str = Field(default="", alias="KAKAO_API_KEY")
     kakao_sender_key: str = Field(default="", alias="KAKAO_SENDER_KEY")
-    # 템플릿 코드 (카카오 비즈메시지 채널에서 승인 후 발급)
-    kakao_template_waiting_confirm: str = Field(default="MEETIN_WAIT", alias="KAKAO_TPL_WAITING_CONFIRM")
-    kakao_template_confirmed: str = Field(default="MEETIN_CONF", alias="KAKAO_TPL_CONFIRMED")
-    kakao_template_refunded: str = Field(default="MEETIN_RFND", alias="KAKAO_TPL_REFUNDED")
-    kakao_template_forfeited: str = Field(default="MEETIN_FORF", alias="KAKAO_TPL_FORFEITED")
-    kakao_template_replacement: str = Field(default="MEETIN_REPL", alias="KAKAO_TPL_REPLACEMENT")
 
     # ─── PASS 휴대폰 본인인증 (Solapi SMS) ──────────────────────────
     # https://developers.solapi.com → API 키 발급 후 아래 3개만 입력
@@ -56,6 +50,13 @@ class Settings(BaseSettings):
     # ─── Redis ───────────────────────────────────────────────────
     # 없으면 WebSocket 인메모리 모드, 스케줄러 단일 실행 모드로 fallback
     redis_url: str = Field(default="", alias="REDIS_URL")
+
+    # ─── Cloudflare R2 ───────────────────────────────────────────
+    r2_endpoint_url: str = Field(default="", alias="R2_ENDPOINT_URL")
+    r2_access_key_id: str = Field(default="", alias="R2_ACCESS_KEY_ID")
+    r2_secret_access_key: str = Field(default="", alias="R2_SECRET_ACCESS_KEY")
+    r2_bucket_name: str = Field(default="meetin-uploads", alias="R2_BUCKET_NAME")
+    r2_public_url: str = Field(default="", alias="R2_PUBLIC_URL")
 
     # ─── Sentry ──────────────────────────────────────────────────
     sentry_dsn: str = Field(default="", alias="SENTRY_DSN")

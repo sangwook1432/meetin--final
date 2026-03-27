@@ -53,8 +53,6 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-meetin}:${POSTGRES_PASSWORD:-meetin}@db:5432/${POSTGRES_DB:-meetin}
       REDIS_URL: redis://redis:6379/0
-    volumes:
-      - uploads_data:/app/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -69,7 +67,7 @@ services:
     build:
       context: ./apps/web
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.meetin.kr}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.meetinapp.com}
         NEXT_PUBLIC_TOSS_CLIENT_KEY: ${NEXT_PUBLIC_TOSS_CLIENT_KEY:-}
     restart: unless-stopped
     depends_on:
@@ -80,4 +78,3 @@ volumes:
   redis_data:
   caddy_data:
   caddy_config:
-  uploads_data:

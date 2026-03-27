@@ -41,3 +41,5 @@ uvicorn==0.32.1
 watchfiles==1.1.1
 websockets==16.0
 redis[asyncio]>=5.0.0
+boto3==1.35.0
+Pillow==11.1.0

@@ -72,7 +72,7 @@ JWT_SECRET=your-very-long-random-secret-here
 PHONE_HMAC_SECRET=another-random-secret-here
 
 # 관리자 이메일 (쉼표로 구분)
-ADMIN_EMAILS=admin@meetin.kr
+ADMIN_EMAILS=admin@meetinapp.com
 ```
 
 **선택 환경 변수 (없으면 mock 모드로 동작):**

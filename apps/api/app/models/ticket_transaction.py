@@ -13,6 +13,7 @@ class TicketTxType(str, enum.Enum):
     CONSUME       = "CONSUME"        # 채팅방 개설 시 소모
     REFUND        = "REFUND"         # 대체인원 확정 or 취소투표 시 환급
     WELCOME_BONUS = "WELCOME_BONUS"  # 사전예약 웰컴 보너스
+    ADMIN_GRANT   = "ADMIN_GRANT"    # 관리자 무상 지급
 
 
 class TicketTransaction(Base):
