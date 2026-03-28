@@ -73,7 +73,7 @@ export default function DiscoverPage() {
   }[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   // 대체인원 매칭권 납부 확인 모달 (REPLACE 초대용)
-  const [replaceConfirm, setReplaceConfirm] = useState<{ inviteId: number; inviteeNick: string | null } | null>(null);
+  const [replacePending, setReplacePending] = useState<{ inviteId: number; inviteeNick: string | null } | null>(null);
   const [replaceLoading, setReplaceLoading] = useState(false);
 
   // 미팅 완료 후 후기/애프터 모달
@@ -129,7 +129,7 @@ export default function DiscoverPage() {
   // REPLACE 초대: 수락 클릭 → 보증금 확인 모달 표시
   const handleInviteAccept = (inv: { id: number; invite_type: string; inviter_nickname: string | null }) => {
     if (inv.invite_type === "REPLACE") {
-      setReplaceConfirm({ inviteId: inv.id, inviteeNick: inv.inviter_nickname });
+      setReplacePending({ inviteId: inv.id, inviteeNick: inv.inviter_nickname });
     } else {
       handleFriendInviteAccept(inv.id);
     }
@@ -164,11 +164,11 @@ export default function DiscoverPage() {
 
   // 보증금 확인 모달 — 예 클릭
   const handleReplaceConfirm = async () => {
-    if (!replaceConfirm) return;
+    if (!replacePending) return;
     setReplaceLoading(true);
     try {
-      const res = await replaceConfirm(replaceConfirm.inviteId);
-      setReplaceConfirm(null);
+      const res = await replaceConfirm(replacePending.inviteId);
+      setReplacePending(null);
       if (res.chat_room_id) router.push(`/chats/${res.chat_room_id}`);
       else router.push(`/meetings/${res.meeting_id}`);
     } catch (e) {
@@ -180,9 +180,9 @@ export default function DiscoverPage() {
 
   // 보증금 확인 모달 — 아니요 클릭 = 거절
   const handleReplaceCancel = async () => {
-    if (!replaceConfirm) return;
-    setReplaceConfirm(null);
-    await handleInviteReject(replaceConfirm.inviteId);
+    if (!replacePending) return;
+    setReplacePending(null);
+    await handleInviteReject(replacePending.inviteId);
   };
 
   const handleFriendAccept = async (friendshipId: number) => {
@@ -360,18 +360,18 @@ export default function DiscoverPage() {
 
 
       {/* 매칭권 소모 확인 모달 (REPLACE 초대) */}
-      {replaceConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={() => setReplaceConfirm(null)}>
+      {replacePending && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={() => setReplacePending(null)}>
           <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-3 flex items-center justify-between">
               <p className="text-base font-bold text-gray-900">매칭권 소모 확인</p>
               <button
-                onClick={() => setReplaceConfirm(null)}
+                onClick={() => setReplacePending(null)}
                 className="flex h-7 w-7 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 text-lg"
               >✕</button>
             </div>
             <p className="mt-3 text-sm text-gray-600 text-center leading-relaxed">
-              {replaceConfirm.inviteeNick || "누군가"}님이 초대한 미팅에 참가하려면<br />
+              {replacePending.inviteeNick || "누군가"}님이 초대한 미팅에 참가하려면<br />
               <span className="font-bold text-blue-600">매칭권 1개</span>를 소모해야 합니다.
             </p>
             <div className="mt-5 flex gap-3">
