@@ -89,7 +89,7 @@ export default function MyProfilePage() {
   async function saveBio() {
     setBioSaving(true);
     try {
-      await updateProfile({ bio_short: bioValue.trim() || null });
+      await updateProfile({ bio_short: bioValue.trim() || undefined });
       await refreshUser?.();
       setEditingBio(false);
     } catch {
