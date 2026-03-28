@@ -53,7 +53,7 @@ _PROFILE_ALLOWED_FIELDS = {
 def update_profile(
     payload: ProfileUpdateRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(require_verified),
+    user: User = Depends(get_current_user),
 ):
     data = payload.model_dump(exclude_unset=True)
     for k, v in data.items():

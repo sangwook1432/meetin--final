@@ -121,10 +121,23 @@ function ProfileInner() {
     e.preventDefault();
     setError(null);
 
+    if (isOnboarding) {
+      if (!form.nickname.trim()) { setError("닉네임을 입력해주세요."); return; }
+      const uniVal = form.university === "직접입력" ? form.universityCustom : form.university;
+      if (!uniVal) { setError("학교를 선택해주세요."); return; }
+      if (!form.major.trim()) { setError("학과를 입력해주세요."); return; }
+      if (!form.entry_year) { setError("학번을 입력해주세요."); return; }
+    }
+
+    const uniValue = form.university === "직접입력" ? form.universityCustom : form.university;
+
     setSaving(true);
     try {
       await updateProfile({
         nickname: form.nickname || undefined,
+        university: isOnboarding ? (uniValue || undefined) : undefined,
+        major: isOnboarding ? (form.major || undefined) : undefined,
+        entry_year: isOnboarding && form.entry_year ? Number(form.entry_year) : undefined,
         preferred_area: form.preferred_area || undefined,
         bio_short: form.bio_short || undefined,
         lookalike_type: (form.lookalike_type as LookalikeType) || undefined,
@@ -246,22 +259,45 @@ function ProfileInner() {
                 placeholder="닉네임 (선택)" maxLength={50} className={inputCls} />
             </FormField>
 
-            <FormField label="학교">
-              <div className={`${inputCls} bg-gray-100 text-gray-500 cursor-default`}>
-                {user?.university ?? "—"}
-              </div>
+            <FormField label="학교" required={isOnboarding}>
+              {isOnboarding ? (
+                <>
+                  <select value={form.university} onChange={set("university")} className={inputCls}>
+                    <option value="">학교 선택</option>
+                    {UNIVERSITIES.map((u) => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                  {form.university === "직접입력" && (
+                    <input type="text" value={form.universityCustom} onChange={set("universityCustom")}
+                      placeholder="학교명 직접 입력" className={`${inputCls} mt-2`} />
+                  )}
+                </>
+              ) : (
+                <div className={`${inputCls} bg-gray-100 text-gray-500 cursor-default`}>
+                  {user?.university ?? "—"}
+                </div>
+              )}
             </FormField>
 
             <div className="grid grid-cols-2 gap-3">
-              <FormField label="학과">
-                <div className={`${inputCls} bg-gray-100 text-gray-500 cursor-default`}>
-                  {user?.major ?? "—"}
-                </div>
+              <FormField label="학과" required={isOnboarding}>
+                {isOnboarding ? (
+                  <input type="text" value={form.major} onChange={set("major")}
+                    placeholder="예) 경영학과" className={inputCls} />
+                ) : (
+                  <div className={`${inputCls} bg-gray-100 text-gray-500 cursor-default`}>
+                    {user?.major ?? "—"}
+                  </div>
+                )}
               </FormField>
-              <FormField label="학번">
-                <div className={`${inputCls} bg-gray-100 text-gray-500 cursor-default`}>
-                  {user?.entry_year != null ? `${user.entry_year}학번` : "—"}
-                </div>
+              <FormField label="학번" required={isOnboarding}>
+                {isOnboarding ? (
+                  <input type="number" value={form.entry_year} onChange={set("entry_year")}
+                    placeholder="예) 2023" min={2000} max={2030} className={inputCls} />
+                ) : (
+                  <div className={`${inputCls} bg-gray-100 text-gray-500 cursor-default`}>
+                    {user?.entry_year != null ? `${user.entry_year}학번` : "—"}
+                  </div>
+                )}
               </FormField>
             </div>
 
