@@ -809,7 +809,7 @@ async def leave_chat_room(
 
         from datetime import timedelta
 
-        # 이미 대기 중인 초대가 있으면 차단 (PENDING 또는 수락 후 보증금 미결제 상태 포함)
+        # 이미 대기 중인 초대가 있으면 차단 (PENDING 또는 수락 후 매칭권 납부 대기 상태 포함)
         existing_pending = db.execute(
             select(MeetingInvitation).where(
                 MeetingInvitation.meeting_id == meeting.id,
@@ -820,7 +820,7 @@ async def leave_chat_room(
         ).scalar_one_or_none()
         if existing_pending:
             if existing_pending.status == InviteStatus.DEPOSIT_PENDING:
-                raise HTTPException(400, "대체 인원이 매칭권 소모 대기 중입니다. 완료 후 자동 교체됩니다.")
+                raise HTTPException(400, "대체 인원이 매칭권 납부 대기 중입니다. 완료 후 자동 교체됩니다.")
             raise HTTPException(400, "이미 대기 중인 초대가 있습니다. 상대방의 응답을 기다려주세요.")
 
         # 총 시도 횟수 (재초대 포함, 매번 새 레코드 INSERT 방식으로 정확히 카운트)

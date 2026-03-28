@@ -687,8 +687,8 @@ def respond_invitation(
             db.commit()
             raise HTTPException(409, "초대한 멤버가 이미 채팅방을 나갔습니다.")
 
-        # 슬롯은 아직 건드리지 않음 — 보증금 결제 후 교체
-        # 초대 상태를 DEPOSIT_PENDING으로 변경하여 결제 대기 표시
+        # 슬롯은 아직 건드리지 않음 — 매칭권 납부 후 교체
+        # 초대 상태를 DEPOSIT_PENDING으로 변경하여 매칭권 납부 대기 표시
         inv.status = InviteStatus.DEPOSIT_PENDING
 
         db.commit()

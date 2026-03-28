@@ -17,7 +17,7 @@ class InviteType(str, enum.Enum):
 
 class InviteStatus(str, enum.Enum):
     PENDING = "PENDING"
-    DEPOSIT_PENDING = "DEPOSIT_PENDING"  # 수락했지만 보증금 미결제 상태
+    DEPOSIT_PENDING = "DEPOSIT_PENDING"  # 대체인원 수락 후 매칭권 납부 대기 상태
     ACCEPTED = "ACCEPTED"
     REJECTED = "REJECTED"
     EXPIRED = "EXPIRED"

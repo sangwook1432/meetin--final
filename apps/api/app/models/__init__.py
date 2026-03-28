@@ -4,8 +4,6 @@ from app.models.meeting_slot import MeetingSlot
 from app.models.meeting_schedule import MeetingSchedule
 from app.models.meeting_invitation import MeetingInvitation
 from app.models.verification_doc import VerificationDoc
-from app.models.deposit import Deposit
-from app.models.confirmation import Confirmation
 from app.models.chat_room import ChatRoom
 from app.models.chat_message import ChatMessage
 from app.models.chat_read_receipt import ChatReadReceipt

@@ -6,17 +6,10 @@
  * 핵심 UI:
  * 1. 팀별 슬롯 + confirmed/대기중 뱃지 (TeamSection → SlotCard)
  * 2. 상태별 액션 버튼
- *    - RECRUITING : [참가하기] / [참가중] / [나가기]
- *    - WAITING_CONFIRM : [보증금 결제 + 확정] / [확정 완료]
- *    - CONFIRMED : [채팅방 입장]
+ *    - RECRUITING      : [참가하기] / [참가중] / [나가기]
+ *    - WAITING_CONFIRM : [매칭권 사용 + 확정] / [확정 완료]
+ *    - CONFIRMED       : [채팅방 입장]
  * 3. CONFIRMED 전환 직후 → 자동으로 /chats/[roomId]로 이동
- *
- * Toss 결제 흐름:
- *   ① prepare_deposit → orderId / amount / orderName 획득
- *   ② loadTossPayments(clientKey).requestPayment(...)  [Toss JS SDK]
- *   ③ 성공 콜백 URL: /payments/success?orderId=...&paymentKey=...&amount=...
- *      → confirmTossPayment(order_id, payment_key)  [서버 검증]
- *   ※ 개발 환경(clientKey 없음): mock 결제 경로로 직접 서버 confirm 호출
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";

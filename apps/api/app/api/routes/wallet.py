@@ -44,7 +44,6 @@ from app.models.wallet_transaction import WalletTransaction, TxType # 경로가 
 
 router = APIRouter()
 
-DEPOSIT_AMOUNT    = 10_000  # 보증금 10,000원
 WITHDRAW_FEE_RATE = 0.10    # 일반환불 수수료 10%
 WITHDRAW_MIN_FEE  = 1_000   # 수수료 최솟값 1,000원
 
@@ -92,34 +91,6 @@ def _record_tx(
         toss_payment_key=toss_payment_key
     )
     db.add(tx)
-
-
-def deduct_deposit(db: Session, user: User, meeting_id: int) -> None:
-    """미팅 확정 시 보증금 차감 (외부에서 호출)"""
-    if user.balance < DEPOSIT_AMOUNT:
-        raise HTTPException(400, f"잔액이 부족합니다. 현재 잔액: {user.balance:,}원")
-    user.balance -= DEPOSIT_AMOUNT
-    _record_tx(
-        db=db, user_id=user.id, tx_type=TxType.DEPOSIT_HOLD, amount=-DEPOSIT_AMOUNT,
-        balance_after=user.balance, note=f"미팅 #{meeting_id} 매칭권 소모", meeting_id=meeting_id
-    )
-
-
-def refund_deposit(db: Session, user: User, meeting_id: int) -> None:
-    """보증금 환급"""
-    user.balance += DEPOSIT_AMOUNT
-    _record_tx(
-        db=db, user_id=user.id, tx_type=TxType.DEPOSIT_REFUND, amount=DEPOSIT_AMOUNT,
-        balance_after=user.balance, note=f"미팅 #{meeting_id} 매칭권 환급", meeting_id=meeting_id
-    )
-
-
-def forfeit_deposit(db: Session, user: User, meeting_id: int) -> None:
-    """보증금 몰수 (채팅방 이탈/노쇼)"""
-    _record_tx(
-        db=db, user_id=user.id, tx_type=TxType.FORFEIT, amount=0,
-        balance_after=user.balance, note=f"미팅 #{meeting_id} 보증금 몰수 (이탈)", meeting_id=meeting_id
-    )
 
 
 # ─── 매칭권 헬퍼 ──────────────────────────────────────────────────
@@ -353,7 +324,7 @@ def _calc_withdraw_fee(amount: int, is_cheongyak: bool) -> tuple[int, int]:
 def _is_cheongyak(db: Session, user_id: int) -> bool:
     """
     청약철회 해당 여부.
-    조건: 마지막 CHARGE가 7일 이내 AND 그 이후 TICKET_PURCHASE/DEPOSIT_HOLD 없음.
+    조건: 마지막 CHARGE가 7일 이내 AND 그 이후 TICKET_PURCHASE 없음.
     """
     from datetime import datetime, timezone, timedelta
     now = datetime.now(timezone.utc)
@@ -381,7 +352,7 @@ def _is_cheongyak(db: Session, user_id: int) -> bool:
         select(WalletTransaction)
         .where(
             WalletTransaction.user_id == user_id,
-            WalletTransaction.tx_type.in_([TxType.TICKET_PURCHASE, TxType.DEPOSIT_HOLD]),
+            WalletTransaction.tx_type == TxType.TICKET_PURCHASE,
             WalletTransaction.created_at > last_charge.created_at,
         )
         .limit(1)

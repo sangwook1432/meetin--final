@@ -12,7 +12,7 @@ import { AppShell } from "@/components/ui/AppShell";
 
 const TOSS_CLIENT_KEY = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY ?? "";
 
-type TxType = "CHARGE" | "DEPOSIT_HOLD" | "DEPOSIT_REFUND" | "FORFEIT" | "WITHDRAW" | "WITHDRAW_DONE" | "ADMIN_ADJUST" | "TICKET_PURCHASE";
+type TxType = "CHARGE" | "FORFEIT" | "WITHDRAW" | "WITHDRAW_DONE" | "ADMIN_ADJUST" | "TICKET_PURCHASE";
 
 interface Transaction {
   id: number;
@@ -26,8 +26,6 @@ interface Transaction {
 
 const TX_LABELS: Record<TxType, string> = {
   CHARGE: "잔액 충전",
-  DEPOSIT_HOLD: "매칭권 소모",
-  DEPOSIT_REFUND: "매칭권 환급",
   FORFEIT: "매칭권 몰수",
   WITHDRAW: "출금 신청",
   WITHDRAW_DONE: "출금 완료",
@@ -37,8 +35,6 @@ const TX_LABELS: Record<TxType, string> = {
 
 const TX_COLORS: Record<TxType, string> = {
   CHARGE: "text-emerald-600",
-  DEPOSIT_HOLD: "text-red-500",
-  DEPOSIT_REFUND: "text-blue-500",
   FORFEIT: "text-red-700",
   WITHDRAW: "text-orange-500",
   WITHDRAW_DONE: "text-orange-600",
@@ -48,8 +44,6 @@ const TX_COLORS: Record<TxType, string> = {
 
 const TX_ICONS: Record<TxType, string> = {
   CHARGE: "💳",
-  DEPOSIT_HOLD: "📤",
-  DEPOSIT_REFUND: "📥",
   FORFEIT: "🚫",
   WITHDRAW: "💸",
   WITHDRAW_DONE: "✅",
