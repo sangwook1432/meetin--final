@@ -154,8 +154,8 @@ export default function PrivacyPage() {
                 </thead>
                 <tbody>
                   <tr>
-                    <td className="border border-gray-200 px-3 py-2">토스페이먼츠(주)</td>
-                    <td className="border border-gray-200 px-3 py-2">결제 처리</td>
+                    <td className="border border-gray-200 px-3 py-2">포트원(주) / KG이니시스(주)</td>
+                    <td className="border border-gray-200 px-3 py-2">결제 처리 및 본인인증</td>
                   </tr>
                   <tr>
                     <td className="border border-gray-200 px-3 py-2">Solapi (솔라피)</td>
@@ -228,8 +228,8 @@ export default function PrivacyPage() {
 
           <div className="rounded-xl bg-gray-50 p-4 text-xs text-gray-500">
             <p>운영자: 전상욱</p>
-            <p>서비스 도메인: [도메인]</p>
-            <p>사업자등록번호: [사업자번호]</p>
+            <p>서비스 도메인: meetinapp.com</p>
+            <p>사업자등록번호: 420-05-03754</p>
             <p>문의: adamjeon2003@gmail.com</p>
           </div>
 

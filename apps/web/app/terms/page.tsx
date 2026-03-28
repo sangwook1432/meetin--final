@@ -194,9 +194,9 @@ export default function TermsPage() {
 
           <div className="rounded-xl bg-gray-50 p-4 text-xs text-gray-500">
             <p>운영자: 전상욱</p>
-            <p>서비스 도메인: [도메인]</p>
-            <p>사업자등록번호: [사업자번호]</p>
-            <p>문의: [이메일]</p>
+            <p>서비스 도메인: meetinapp.com</p>
+            <p>사업자등록번호: 420-05-03754</p>
+            <p>문의: adamjeon2003@gmail.com</p>
           </div>
 
         </section>
