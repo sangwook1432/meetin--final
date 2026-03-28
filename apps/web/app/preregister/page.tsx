@@ -179,14 +179,6 @@ export default function PreregisterPage() {
           </ul>
         </div>
 
-        {/* ── 3. 감성 문구 ────────────────────────────────────────── */}
-        <div className="mb-4 rounded-2xl bg-gray-50 px-5 py-4 text-center">
-          <p className="text-sm leading-relaxed text-gray-500">
-            다른 학교 인맥이 없거나<br />
-            <span className="font-semibold text-gray-800">같이 미팅 갈 사람이 없는 사람들</span>을 위한 앱
-          </p>
-        </div>
-
         {/* ── 4. 정원 현황 ─────────────────────────────────────────── */}
         <div className="mb-4 grid grid-cols-2 gap-3">
           {/* 여자 */}
@@ -235,7 +227,7 @@ export default function PreregisterPage() {
           <div className="space-y-2.5">
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-600">여자</span>
-              <span className="text-sm font-semibold text-pink-600">매칭권 2개 + 우선 매칭 ✨</span>
+              <span className="text-sm font-semibold text-pink-600">매칭권 2개</span>
             </div>
             <div className="h-px bg-amber-100" />
             <div className="flex items-center justify-between">
