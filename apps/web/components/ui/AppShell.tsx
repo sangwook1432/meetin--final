@@ -116,6 +116,20 @@ export function AppShell({
         {children}
       </main>
 
+      {/* 사업자 정보 푸터 */}
+      <footer className="border-t border-gray-100 bg-white px-5 py-4 pb-24 text-xs text-gray-400 space-y-0.5">
+        <p className="font-semibold text-gray-500">MEETIN.</p>
+        <p>상호명: MEETIN. · 대표자: 전상욱</p>
+        <p>사업자등록번호: 420-05-03754 (간이과세자)</p>
+        <p>사업장주소: 경기도 고양시 일산서구 대산로 106, 109동 1401호 (주엽동, 강선마을)</p>
+        <p>통신판매업신고번호: 신고 진행 중</p>
+        <p>연락처: adamjeon2003@gmail.com</p>
+        <div className="flex gap-3 pt-1">
+          <a href="/terms" className="underline hover:text-gray-600">이용약관</a>
+          <a href="/privacy" className="underline hover:text-gray-600">개인정보처리방침</a>
+        </div>
+      </footer>
+
       {/* 바텀 탭 — 항상 표시 */}
       <nav className="fixed bottom-0 left-0 right-0 z-20 flex border-t border-gray-100 bg-white">
         {TABS.map((tab) => {
