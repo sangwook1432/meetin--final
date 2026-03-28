@@ -118,7 +118,7 @@ export function AppShell({
       </main>
 
       {/* 사업자 정보 푸터 */}
-      <footer className="border-t border-gray-100 bg-white px-5 text-xs text-gray-400 overflow-hidden">
+      <footer className="border-t border-gray-100 bg-white px-5 pb-16 text-xs text-gray-400 overflow-hidden">
         <button
           onClick={() => setBizOpen((v) => !v)}
           className="flex w-full items-center justify-between py-1.5 text-gray-400"
