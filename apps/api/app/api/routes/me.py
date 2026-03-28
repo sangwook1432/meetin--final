@@ -72,7 +72,7 @@ async def upload_photo(
     slot: int = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    user: User = Depends(require_verified),
+    user: User = Depends(get_current_user),
 ):
     """프로필 사진 업로드. slot=1 또는 2."""
     if slot not in (1, 2):

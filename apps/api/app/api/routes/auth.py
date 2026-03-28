@@ -167,16 +167,7 @@ async def register(request: Request, response: Response, payload: RegisterReques
     if db.query(User).filter(User.phone_hash == phash).first():
         raise HTTPException(status_code=409, detail="이미 가입된 전화번호입니다.")
 
-    # 모든 검증 통과 후 토큰 소비
-    await pass_auth.consume_phone_token(payload.phone_token)
-
-    # 사전예약 여부 확인 (가입 전에 미리 조회)
-    prereg = db.query(Preregistration).filter(
-        Preregistration.phone_hash == phash,
-        Preregistration.granted == False,  # noqa: E712
-    ).first()
-
-    # phone_token에 저장된 본인인증 데이터 추출 (KG이니시스 mock 포함)
+    # phone_token에 저장된 본인인증 데이터 추출 (소비 전에 먼저 조회)
     token_data = await pass_auth.peek_phone_token_full(payload.phone_token) or {}
     verified_name = token_data.get("name")
     verified_birth = token_data.get("birth_date")
@@ -186,6 +177,18 @@ async def register(request: Request, response: Response, payload: RegisterReques
             verified_age = datetime.now().year - int(verified_birth[:4]) + 1
         except ValueError:
             pass
+    from app.models.user import Gender as GenderEnum
+    _g = token_data.get("gender")
+    verified_gender = GenderEnum.MALE if _g == "M" else GenderEnum.FEMALE if _g == "F" else None
+
+    # 모든 검증 통과 후 토큰 소비
+    await pass_auth.consume_phone_token(payload.phone_token)
+
+    # 사전예약 여부 확인 (가입 전에 미리 조회)
+    prereg = db.query(Preregistration).filter(
+        Preregistration.phone_hash == phash,
+        Preregistration.granted == False,  # noqa: E712
+    ).first()
 
     user = User(
         username=username,
@@ -197,6 +200,7 @@ async def register(request: Request, response: Response, payload: RegisterReques
         is_admin=False,  # 관리자는 DB에서 직접 지정
         real_name=verified_name,
         age=verified_age,
+        gender=verified_gender,
     )
     db.add(user)
     db.flush()  # user.id 확보
