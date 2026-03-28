@@ -292,7 +292,7 @@ function ProfileInner() {
               <FormField label="학번" required={isOnboarding}>
                 {isOnboarding ? (
                   <input type="number" value={form.entry_year} onChange={set("entry_year")}
-                    placeholder="예) 2023" min={2000} max={2030} className={inputCls} />
+                    placeholder="예) 22" min={0} max={99} maxLength={2} className={inputCls} />
                 ) : (
                   <div className={`${inputCls} bg-gray-100 text-gray-500 cursor-default`}>
                     {user?.entry_year != null ? `${user.entry_year}학번` : "—"}
