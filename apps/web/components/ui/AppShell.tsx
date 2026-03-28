@@ -118,38 +118,28 @@ export function AppShell({
       </main>
 
       {/* 사업자 정보 푸터 */}
-      <footer className="border-t border-gray-100 bg-white px-5 pb-24 text-xs text-gray-400">
+      <footer className="border-t border-gray-100 bg-white px-5 pb-24 text-xs text-gray-400 overflow-hidden">
         <button
-          onClick={() => setBizOpen(true)}
-          className="flex w-full items-center justify-between py-3 text-gray-400"
+          onClick={() => setBizOpen((v) => !v)}
+          className="flex w-full items-center justify-between py-2 text-gray-400"
         >
           <span>MEETIN. 사업자정보</span>
-          <span>∨</span>
+          <span className={`transition-transform duration-200 ${bizOpen ? "rotate-180" : ""}`}>∨</span>
         </button>
-      </footer>
-
-      {/* 사업자 정보 바텀시트 */}
-      {bizOpen && (
-        <>
-          <div className="fixed inset-0 z-30 bg-black/40" onClick={() => setBizOpen(false)} />
-          <div className="fixed bottom-0 left-0 right-0 z-40 rounded-t-2xl bg-white px-5 py-5 shadow-xl">
-            <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-gray-300" />
-            <p className="mb-3 text-sm font-bold text-gray-700">사업자 정보</p>
-            <div className="space-y-1 text-xs text-gray-500">
-              <p>상호명: MEETIN. · 대표자: 전상욱</p>
-              <p>사업자등록번호: 420-05-03754 (간이과세자)</p>
-              <p>사업장주소: 경기도 고양시 일산서구 대산로 106, 109동 1401호 (주엽동, 강선마을)</p>
-              <p>통신판매업신고번호: 신고 진행 중</p>
-              <p>연락처: adamjeon2003@gmail.com</p>
-              <div className="flex gap-3 pt-2">
-                <a href="/terms" className="underline hover:text-gray-600">이용약관</a>
-                <a href="/privacy" className="underline hover:text-gray-600">개인정보처리방침</a>
-              </div>
+        {bizOpen && (
+          <div className="pb-3 space-y-0.5 text-gray-500">
+            <p>상호명: MEETIN. · 대표자: 전상욱</p>
+            <p>사업자등록번호: 420-05-03754 (간이과세자)</p>
+            <p>사업장주소: 경기도 고양시 일산서구 대산로 106, 109동 1401호 (주엽동, 강선마을)</p>
+            <p>통신판매업신고번호: 신고 진행 중</p>
+            <p>연락처: adamjeon2003@gmail.com</p>
+            <div className="flex gap-3 pt-1">
+              <a href="/terms" className="underline hover:text-gray-600">이용약관</a>
+              <a href="/privacy" className="underline hover:text-gray-600">개인정보처리방침</a>
             </div>
-            <div className="pb-safe pb-2" />
           </div>
-        </>
-      )}
+        )}
+      </footer>
 
       {/* 바텀 탭 — 항상 표시 */}
       <nav className="fixed bottom-0 left-0 right-0 z-20 flex border-t border-gray-100 bg-white">
