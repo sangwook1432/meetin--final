@@ -19,7 +19,7 @@ import app.services.pass_auth as pass_auth
 router = APIRouter()
 
 WELCOME_TICKETS = {
-    Gender.FEMALE: 3,
+    Gender.FEMALE: 2,
     Gender.MALE: 1,
 }
 

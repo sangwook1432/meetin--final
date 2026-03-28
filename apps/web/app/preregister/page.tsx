@@ -6,22 +6,27 @@ const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 type Step = "phone" | "otp" | "gender";
 
+const STEPS: Step[] = ["phone", "otp", "gender"];
+
+function getUrgencyLabel(count: number, max: number) {
+  if (count >= max) return { text: "마감", cls: "text-red-500" };
+  const rate = count / max;
+  if (rate >= 0.7) return { text: "🔥 빠르게 마감 중", cls: "text-orange-500" };
+  if (rate >= 0.4) return { text: "대기 중", cls: "text-yellow-600" };
+  return { text: "모집 중", cls: "text-green-600" };
+}
+
 export default function PreregisterPage() {
   const [step, setStep] = useState<Step>("phone");
-
-  // 단계별 상태
   const [phone, setPhone] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [phoneToken, setPhoneToken] = useState("");
   const [gender, setGender] = useState<"MALE" | "FEMALE" | "">("");
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ tickets: number; gender: "MALE" | "FEMALE" } | null>(null);
-
   const [stats, setStats] = useState<{ male: number; female: number; male_max: number; female_max: number } | null>(null);
 
-  // 정원 현황 로드
   useEffect(() => {
     fetch(`${BASE}/preregister/stats`)
       .then((r) => r.json())
@@ -29,7 +34,6 @@ export default function PreregisterPage() {
       .catch(() => {});
   }, []);
 
-  // ── 에러 메시지 추출 헬퍼 ─────────────────────────────────────
   const parseError = (status: number, detail: unknown, messages: Partial<Record<number, string>>, fallback: string): string => {
     if (messages[status]) return messages[status]!;
     if (typeof detail === "string") return detail;
@@ -37,7 +41,6 @@ export default function PreregisterPage() {
     return fallback;
   };
 
-  // ── 1단계: OTP 발송 ────────────────────────────────────────────
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -62,7 +65,6 @@ export default function PreregisterPage() {
     }
   };
 
-  // ── 2단계: OTP 검증 ────────────────────────────────────────────
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -87,7 +89,6 @@ export default function PreregisterPage() {
     }
   };
 
-  // ── 3단계: 사전예약 등록 ───────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!gender) { setError("성별을 선택해주세요."); return; }
@@ -102,7 +103,6 @@ export default function PreregisterPage() {
       const data = await res.json();
       if (!res.ok) {
         if (res.status === 400) {
-          // phone_token 만료 → 처음부터 다시
           setStep("phone");
           setOtpCode("");
           setPhoneToken("");
@@ -120,19 +120,22 @@ export default function PreregisterPage() {
     }
   };
 
-  // ── 완료 화면 ──────────────────────────────────────────────────
+  // ── 완료 화면 ─────────────────────────────────────────────────────
   if (done) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4">
-        <div className="w-full max-w-sm rounded-3xl bg-white p-8 text-center shadow-xl">
+      <div className="flex min-h-screen flex-col items-center justify-center bg-white px-4">
+        <div className="w-full max-w-sm rounded-3xl border border-gray-100 bg-white p-8 text-center shadow-xl">
           <div className="mb-4 text-5xl">{done.gender === "FEMALE" ? "🎀" : "🎯"}</div>
           <h1 className="text-2xl font-black text-gray-900">사전예약 완료!</h1>
-          <p className="mt-3 text-gray-500 text-sm leading-relaxed">
+          <p className="mt-3 text-sm leading-relaxed text-gray-500">
             앱 출시와 동시에<br />
             <span className="font-bold text-blue-600">매칭권 {done.tickets}개</span>가 자동으로 지급됩니다.
           </p>
+          {done.gender === "FEMALE" && (
+            <p className="mt-1 text-xs font-medium text-pink-500">+ 우선 매칭 혜택도 드려요 ✨</p>
+          )}
           <div className="mt-6 rounded-2xl bg-blue-50 px-4 py-4">
-            <p className="text-xs text-blue-500 font-medium">출시 알림을 받으려면</p>
+            <p className="text-xs font-medium text-blue-500">출시 알림을 받으려면</p>
             <p className="mt-1 text-sm font-bold text-blue-800">가입하신 번호로 문자를 드릴게요 📱</p>
           </div>
         </div>
@@ -140,82 +143,162 @@ export default function PreregisterPage() {
     );
   }
 
+  const femaleLabel = stats ? getUrgencyLabel(stats.female, stats.female_max) : null;
+  const maleLabel = stats ? getUrgencyLabel(stats.male, stats.male_max) : null;
+  const currentStepIdx = STEPS.indexOf(step);
+
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4">
-      <div className="w-full max-w-sm">
+    <div className="min-h-screen bg-white px-4 pb-16">
+      <div className="mx-auto w-full max-w-sm pt-12">
 
-        {/* 헤더 */}
+        {/* ── 1. 헤더 ────────────────────────────────────────────── */}
         <div className="mb-8 text-center">
-          <h1 className="text-4xl font-black tracking-tight text-gray-900">MEETIN.</h1>
-          <p className="mt-2 text-sm text-gray-500">대학생 미팅 앱 — 사전예약</p>
-        </div>
-
-        {/* 정원 현황 */}
-        <div className="mb-6 grid grid-cols-2 gap-3">
-          <div className="rounded-2xl bg-pink-50 border border-pink-100 p-4 text-center">
-            <p className="text-2xl font-black text-pink-600">
-              {stats ? `${stats.female}/${stats.female_max}` : "—"}
-            </p>
-            <p className="mt-0.5 text-xs text-pink-400 font-medium">여자 정원</p>
-            {stats && stats.female >= stats.female_max && (
-              <p className="mt-1 text-xs font-bold text-red-500">마감</p>
-            )}
-          </div>
-          <div className="rounded-2xl bg-blue-50 border border-blue-100 p-4 text-center">
-            <p className="text-2xl font-black text-blue-600">
-              {stats ? `${stats.male}/${stats.male_max}` : "—"}
-            </p>
-            <p className="mt-0.5 text-xs text-blue-400 font-medium">남자 정원</p>
-            {stats && stats.male >= stats.male_max && (
-              <p className="mt-1 text-xs font-bold text-red-500">마감</p>
-            )}
+          <p className="mb-3 text-[11px] font-bold tracking-[0.25em] text-blue-500">MEETIN.</p>
+          <h1 className="text-[1.85rem] font-black leading-tight tracking-tight text-gray-900">
+            같은 대학생끼리<br />팀 미팅 매칭
+          </h1>
+          <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-1.5">
+            <span className="text-[11px] font-bold text-white">선착순 150명만 무료 매칭권 제공</span>
           </div>
         </div>
 
-        {/* 단계 인디케이터 */}
-        <div className="mb-4 flex items-center justify-center gap-2">
-          {(["phone", "otp", "gender"] as Step[]).map((s, i) => (
-            <div key={s} className="flex items-center gap-2">
-              <div className={`h-2 w-2 rounded-full transition-all ${
-                step === s ? "bg-blue-600 w-4" : i < ["phone","otp","gender"].indexOf(step) ? "bg-blue-300" : "bg-gray-200"
-              }`} />
+        {/* ── 2. 신뢰 섹션 ────────────────────────────────────────── */}
+        <div className="mb-4 rounded-2xl border border-green-100 bg-green-50 px-5 py-4">
+          <p className="mb-2.5 text-[10px] font-bold uppercase tracking-widest text-green-600">안전하게 참여하세요</p>
+          <ul className="space-y-2">
+            {[
+              "학교 인증된 사람만 참여",
+              "팀 매칭이라 부담 없음",
+              "원치 않으면 언제든 거절 가능",
+            ].map((item) => (
+              <li key={item} className="flex items-center gap-2.5 text-sm text-green-800">
+                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-green-500 text-[9px] font-bold text-white">✓</span>
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* ── 3. 감성 문구 ────────────────────────────────────────── */}
+        <div className="mb-4 rounded-2xl bg-gray-50 px-5 py-4 text-center">
+          <p className="text-sm leading-relaxed text-gray-500">
+            다른 학교 인맥이 없거나<br />
+            <span className="font-semibold text-gray-800">같이 미팅 갈 사람이 없는 사람들</span>을 위한 앱
+          </p>
+        </div>
+
+        {/* ── 4. 정원 현황 ─────────────────────────────────────────── */}
+        <div className="mb-4 grid grid-cols-2 gap-3">
+          {/* 여자 */}
+          <div className="rounded-2xl border border-pink-100 bg-pink-50 p-4 text-center">
+            <p className="text-xl font-black text-pink-600">
+              {stats ? stats.female : "—"}
+              <span className="text-xs font-semibold text-pink-400"> / {stats?.female_max ?? 150}</span>
+            </p>
+            <p className="mt-0.5 text-xs font-semibold text-pink-500">여자</p>
+            {femaleLabel && (
+              <p className={`mt-1 text-[11px] font-bold ${femaleLabel.cls}`}>{femaleLabel.text}</p>
+            )}
+            {stats && (
+              <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-pink-100">
+                <div
+                  className="h-1 rounded-full bg-pink-400 transition-all"
+                  style={{ width: `${Math.min((stats.female / stats.female_max) * 100, 100)}%` }}
+                />
+              </div>
+            )}
+          </div>
+          {/* 남자 */}
+          <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-center">
+            <p className="text-xl font-black text-blue-600">
+              {stats ? stats.male : "—"}
+              <span className="text-xs font-semibold text-blue-400"> / {stats?.male_max ?? 150}</span>
+            </p>
+            <p className="mt-0.5 text-xs font-semibold text-blue-500">남자</p>
+            {maleLabel && (
+              <p className={`mt-1 text-[11px] font-bold ${maleLabel.cls}`}>{maleLabel.text}</p>
+            )}
+            {stats && (
+              <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-blue-100">
+                <div
+                  className="h-1 rounded-full bg-blue-400 transition-all"
+                  style={{ width: `${Math.min((stats.male / stats.male_max) * 100, 100)}%` }}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── 5. 혜택 섹션 ─────────────────────────────────────────── */}
+        <div className="mb-7 rounded-2xl border border-amber-100 bg-amber-50 px-5 py-4">
+          <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-amber-600">🎁 사전예약 혜택</p>
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-600">여자</span>
+              <span className="text-sm font-semibold text-pink-600">매칭권 2개 + 우선 매칭 ✨</span>
             </div>
+            <div className="h-px bg-amber-100" />
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-600">남자</span>
+              <span className="text-sm font-semibold text-blue-600">매칭권 1개</span>
+            </div>
+          </div>
+        </div>
+
+        {/* ── 스텝 인디케이터 ──────────────────────────────────────── */}
+        <div className="mb-4 flex items-center justify-center gap-1.5">
+          {STEPS.map((s, i) => (
+            <div
+              key={s}
+              className={`h-1.5 rounded-full transition-all duration-300 ${
+                step === s ? "w-6 bg-blue-600" : i < currentStepIdx ? "w-3 bg-blue-300" : "w-3 bg-gray-200"
+              }`}
+            />
           ))}
         </div>
 
-        {/* ── 1단계: 전화번호 입력 ── */}
+        {/* ── 1단계: 전화번호 ──────────────────────────────────────── */}
         {step === "phone" && (
-          <form onSubmit={handleSendOtp} className="rounded-3xl bg-white p-6 shadow-xl space-y-4">
+          <form onSubmit={handleSendOtp} className="space-y-4 rounded-3xl border border-gray-100 bg-white p-6 shadow-[0_2px_24px_rgba(0,0,0,0.07)]">
             <div>
-              <p className="mb-4 text-sm font-semibold text-gray-700">휴대폰 번호를 입력해주세요</p>
-              <label className="mb-1.5 block text-xs font-semibold text-gray-500">휴대폰 번호</label>
+              <p className="mb-1 text-base font-bold text-gray-900">휴대폰 번호 입력</p>
+              <p className="mb-4 text-xs text-gray-400">사전예약 신청을 위해 번호 인증이 필요해요</p>
               <input
                 type="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="01012345678"
                 required
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 outline-none focus:border-blue-400 focus:bg-white transition-all"
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 outline-none transition-all focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-50"
               />
             </div>
             {error && <p className="rounded-xl bg-red-50 px-4 py-2.5 text-xs text-red-500">{error}</p>}
             <button
               type="submit"
               disabled={loading || !phone}
-              className="w-full rounded-xl bg-blue-600 py-3.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-40 transition-all"
+              className="w-full rounded-xl bg-blue-600 py-4 text-sm font-bold text-white transition-all hover:bg-blue-700 active:scale-[0.98] disabled:opacity-40"
             >
-              {loading ? "발송 중..." : "인증번호 받기"}
+              {loading ? "발송 중..." : "사전예약 하고 먼저 매칭 받기"}
             </button>
-            <p className="text-center text-xs text-gray-400">앱 출시 시 입력하신 번호로 알림을 드립니다</p>
+            <div className="space-y-1.5 pt-1">
+              <p className="flex items-center gap-2 text-xs text-gray-400">
+                <span className="text-green-500">✔</span>
+                인증번호 외 다른 용도로 사용되지 않습니다
+              </p>
+              <p className="flex items-center gap-2 text-xs text-gray-400">
+                <span className="text-green-500">✔</span>
+                스팸 절대 없음
+              </p>
+            </div>
           </form>
         )}
 
-        {/* ── 2단계: OTP 입력 ── */}
+        {/* ── 2단계: OTP ───────────────────────────────────────────── */}
         {step === "otp" && (
-          <form onSubmit={handleVerifyOtp} className="rounded-3xl bg-white p-6 shadow-xl space-y-4">
+          <form onSubmit={handleVerifyOtp} className="space-y-4 rounded-3xl border border-gray-100 bg-white p-6 shadow-[0_2px_24px_rgba(0,0,0,0.07)]">
             <div>
-              <p className="mb-1 text-sm font-semibold text-gray-700">인증번호를 입력해주세요</p>
-              <p className="mb-4 text-xs text-gray-400">{phone}로 발송된 6자리 번호</p>
+              <p className="mb-1 text-base font-bold text-gray-900">인증번호 입력</p>
+              <p className="mb-4 text-xs text-gray-400">{phone}로 발송된 6자리 번호를 입력해주세요</p>
               <input
                 type="text"
                 inputMode="numeric"
@@ -224,32 +307,33 @@ export default function PreregisterPage() {
                 onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
                 placeholder="000000"
                 required
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-center text-xl font-bold tracking-widest text-gray-900 outline-none focus:border-blue-400 focus:bg-white transition-all"
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-center text-2xl font-bold tracking-[0.4em] text-gray-900 outline-none transition-all focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-50"
               />
             </div>
             {error && <p className="rounded-xl bg-red-50 px-4 py-2.5 text-xs text-red-500">{error}</p>}
             <button
               type="submit"
               disabled={loading || otpCode.length !== 6}
-              className="w-full rounded-xl bg-blue-600 py-3.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-40 transition-all"
+              className="w-full rounded-xl bg-blue-600 py-4 text-sm font-bold text-white transition-all hover:bg-blue-700 active:scale-[0.98] disabled:opacity-40"
             >
               {loading ? "확인 중..." : "인증 확인"}
             </button>
             <button
               type="button"
               onClick={() => { setStep("phone"); setOtpCode(""); setError(null); }}
-              className="w-full text-center text-xs text-gray-400 hover:text-gray-600"
+              className="w-full text-center text-xs text-gray-400 transition-colors hover:text-gray-600"
             >
               번호 다시 입력하기
             </button>
           </form>
         )}
 
-        {/* ── 3단계: 성별 선택 ── */}
+        {/* ── 3단계: 성별 ──────────────────────────────────────────── */}
         {step === "gender" && (
-          <form onSubmit={handleSubmit} className="rounded-3xl bg-white p-6 shadow-xl space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4 rounded-3xl border border-gray-100 bg-white p-6 shadow-[0_2px_24px_rgba(0,0,0,0.07)]">
             <div>
-              <p className="mb-4 text-sm font-semibold text-gray-700">성별을 선택해주세요</p>
+              <p className="mb-1 text-base font-bold text-gray-900">성별 선택</p>
+              <p className="mb-4 text-xs text-gray-400">혜택이 성별에 따라 달라져요</p>
               <div className="grid grid-cols-2 gap-2">
                 {(["FEMALE", "MALE"] as const).map((g) => {
                   const isFull = stats
@@ -261,7 +345,7 @@ export default function PreregisterPage() {
                       type="button"
                       onClick={() => !isFull && setGender(g)}
                       disabled={isFull}
-                      className={`rounded-xl border-2 py-3 text-sm font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                      className={`rounded-xl border-2 py-3.5 text-sm font-bold transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
                         gender === g
                           ? g === "FEMALE"
                             ? "border-pink-400 bg-pink-50 text-pink-700"
@@ -280,11 +364,20 @@ export default function PreregisterPage() {
             <button
               type="submit"
               disabled={loading || !gender}
-              className="w-full rounded-xl bg-blue-600 py-3.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-40 transition-all"
+              className="w-full rounded-xl bg-blue-600 py-4 text-sm font-bold text-white transition-all hover:bg-blue-700 active:scale-[0.98] disabled:opacity-40"
             >
               {loading ? "등록 중..." : "사전예약 신청하기"}
             </button>
-            <p className="text-center text-xs text-gray-400">앱 출시 시 입력하신 번호로 알림을 드립니다</p>
+            <div className="space-y-1.5 pt-1">
+              <p className="flex items-center gap-2 text-xs text-gray-400">
+                <span className="text-green-500">✔</span>
+                인증번호 외 다른 용도로 사용되지 않습니다
+              </p>
+              <p className="flex items-center gap-2 text-xs text-gray-400">
+                <span className="text-green-500">✔</span>
+                스팸 절대 없음
+              </p>
+            </div>
           </form>
         )}
 
