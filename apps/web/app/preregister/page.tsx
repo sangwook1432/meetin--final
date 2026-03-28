@@ -162,23 +162,6 @@ export default function PreregisterPage() {
           </div>
         </div>
 
-        {/* ── 2. 신뢰 섹션 ────────────────────────────────────────── */}
-        <div className="mb-4 rounded-2xl border border-green-100 bg-green-50 px-5 py-4">
-          <p className="mb-2.5 text-[10px] font-bold uppercase tracking-widest text-green-600">안전하게 참여하세요</p>
-          <ul className="space-y-2">
-            {[
-              "학교 인증된 사람만 참여",
-              "팀 매칭이라 부담 없음",
-              "원치 않으면 언제든 거절 가능",
-            ].map((item) => (
-              <li key={item} className="flex items-center gap-2.5 text-sm text-green-800">
-                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-green-500 text-[9px] font-bold text-white">✓</span>
-                {item}
-              </li>
-            ))}
-          </ul>
-        </div>
-
         {/* ── 4. 정원 현황 ─────────────────────────────────────────── */}
         <div className="mb-4 grid grid-cols-2 gap-3">
           {/* 여자 */}
@@ -283,6 +266,25 @@ export default function PreregisterPage() {
               </p>
             </div>
           </form>
+        )}
+
+        {/* ── 신뢰 섹션 (1단계에서만 표시) ────────────────────────── */}
+        {step === "phone" && (
+          <div className="mt-4 rounded-2xl border border-green-100 bg-green-50 px-5 py-4">
+            <p className="mb-2.5 text-[10px] font-bold uppercase tracking-widest text-green-600">안전하게 참여하세요</p>
+            <ul className="space-y-2">
+              {[
+                "학교 인증된 사람만 참여",
+                "팀 매칭이라 부담 없음",
+                "원치 않으면 언제든 거절 가능",
+              ].map((item) => (
+                <li key={item} className="flex items-center gap-2.5 text-sm text-green-800">
+                  <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-green-500 text-[9px] font-bold text-white">✓</span>
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
 
         {/* ── 2단계: OTP ───────────────────────────────────────────── */}
