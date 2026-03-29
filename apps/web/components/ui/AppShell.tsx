@@ -9,7 +9,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { deleteAccount } from "@/lib/api";
 
@@ -43,6 +43,9 @@ export function AppShell({
   const { user, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [bizOpen, setBizOpen] = useState(false);
+  const dragStartY = useRef<number>(0);
+  const [dragOffset, setDragOffset] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [withdrawAgreed, setWithdrawAgreed] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
@@ -55,6 +58,24 @@ export function AppShell({
   // Case C: 잔액 <= 1000, 매칭권 0 → 일반 확인
   const withdrawCase: "A" | "B" | "C" =
     walletBalance > 1000 ? "A" : ticketCount > 0 ? "B" : "C";
+
+  function handleSheetTouchStart(e: React.TouchEvent) {
+    dragStartY.current = e.touches[0].clientY;
+    setIsDragging(true);
+  }
+
+  function handleSheetTouchMove(e: React.TouchEvent) {
+    const delta = e.touches[0].clientY - dragStartY.current;
+    if (delta > 0) setDragOffset(delta);
+  }
+
+  function handleSheetTouchEnd() {
+    setIsDragging(false);
+    if (dragOffset > 80) {
+      setMenuOpen(false);
+    }
+    setDragOffset(0);
+  }
 
   function openWithdrawModal() {
     setWithdrawAgreed(false);
@@ -295,7 +316,16 @@ export function AppShell({
             onClick={() => setMenuOpen(false)}
           />
           {/* 바텀시트 */}
-          <div className="fixed bottom-0 left-0 right-0 z-40 rounded-t-2xl bg-white shadow-xl">
+          <div
+            className="fixed bottom-0 left-0 right-0 z-40 rounded-t-2xl bg-white shadow-xl"
+            style={{
+              transform: `translateY(${dragOffset}px)`,
+              transition: isDragging ? "none" : "transform 0.25s ease",
+            }}
+            onTouchStart={handleSheetTouchStart}
+            onTouchMove={handleSheetTouchMove}
+            onTouchEnd={handleSheetTouchEnd}
+          >
             <div className="mx-auto mb-3 mt-3 h-1 w-10 rounded-full bg-gray-300" />
             <div className="px-4 pb-2">
               <p className="mb-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">메뉴</p>
