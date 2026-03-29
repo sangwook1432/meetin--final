@@ -359,11 +359,11 @@ export default function AdminPage() {
       </div>
 
       {/* 탭 */}
-      <div className="max-w-6xl mx-auto px-6 pt-5">
-        <div className="flex gap-1 bg-gray-100 rounded-2xl p-1 w-fit">
+      <div className="max-w-6xl mx-auto px-6 pt-5 overflow-x-auto">
+        <div className="flex gap-1 bg-gray-100 rounded-2xl p-1 w-max">
           <button
             onClick={() => setTab("verify")}
-            className={`rounded-xl px-5 py-2.5 text-sm font-bold transition-all ${
+            className={`shrink-0 whitespace-nowrap rounded-xl px-5 py-2.5 text-sm font-bold transition-all ${
               tab === "verify" ? "bg-white shadow text-gray-900" : "text-gray-500 hover:text-gray-700"
             }`}
           >
@@ -371,7 +371,7 @@ export default function AdminPage() {
           </button>
           <button
             onClick={() => setTab("withdraw")}
-            className={`rounded-xl px-5 py-2.5 text-sm font-bold transition-all flex items-center gap-2 ${
+            className={`shrink-0 whitespace-nowrap rounded-xl px-5 py-2.5 text-sm font-bold transition-all flex items-center gap-2 ${
               tab === "withdraw" ? "bg-white shadow text-gray-900" : "text-gray-500 hover:text-gray-700"
             }`}
           >
@@ -384,7 +384,7 @@ export default function AdminPage() {
           </button>
           <button
             onClick={() => setTab("complaints")}
-            className={`rounded-xl px-5 py-2.5 text-sm font-bold transition-all flex items-center gap-2 ${
+            className={`shrink-0 whitespace-nowrap rounded-xl px-5 py-2.5 text-sm font-bold transition-all flex items-center gap-2 ${
               tab === "complaints" ? "bg-white shadow text-gray-900" : "text-gray-500 hover:text-gray-700"
             }`}
           >
@@ -397,7 +397,7 @@ export default function AdminPage() {
           </button>
           <button
             onClick={() => setTab("preregister")}
-            className={`rounded-xl px-5 py-2.5 text-sm font-bold transition-all flex items-center gap-2 ${
+            className={`shrink-0 whitespace-nowrap rounded-xl px-5 py-2.5 text-sm font-bold transition-all flex items-center gap-2 ${
               tab === "preregister" ? "bg-white shadow text-gray-900" : "text-gray-500 hover:text-gray-700"
             }`}
           >
@@ -410,7 +410,7 @@ export default function AdminPage() {
           </button>
           <button
             onClick={() => setTab("reports")}
-            className={`rounded-xl px-5 py-2.5 text-sm font-bold transition-all flex items-center gap-2 ${
+            className={`shrink-0 whitespace-nowrap rounded-xl px-5 py-2.5 text-sm font-bold transition-all flex items-center gap-2 ${
               tab === "reports" ? "bg-white shadow text-gray-900" : "text-gray-500 hover:text-gray-700"
             }`}
           >
@@ -423,7 +423,7 @@ export default function AdminPage() {
           </button>
           <button
             onClick={() => setTab("tickets")}
-            className={`rounded-xl px-5 py-2.5 text-sm font-bold transition-all ${
+            className={`shrink-0 whitespace-nowrap rounded-xl px-5 py-2.5 text-sm font-bold transition-all ${
               tab === "tickets" ? "bg-white shadow text-gray-900" : "text-gray-500 hover:text-gray-700"
             }`}
           >
