@@ -215,7 +215,7 @@ export default function FriendsPage() {
                           e.stopPropagation();
                           setMenuOpenId(menuOpenId === f.id ? null : f.id);
                         }}
-                        className="ml-1 p-1 text-gray-400 hover:text-gray-600 rounded"
+                        className="ml-1 p-2 text-gray-400 hover:text-gray-600 rounded"
                       >
                         ⋮
                       </button>
@@ -285,14 +285,14 @@ export default function FriendsPage() {
                         <button
                           onClick={() => handleAccept(req.friendship_id)}
                           disabled={respondingId === req.friendship_id}
-                          className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50 transition-all"
+                          className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50 transition-all"
                         >
                           수락
                         </button>
                         <button
                           onClick={() => handleReject(req.friendship_id)}
                           disabled={respondingId === req.friendship_id}
-                          className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-500 hover:bg-gray-50 disabled:opacity-50 transition-all"
+                          className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-500 hover:bg-gray-50 disabled:opacity-50 transition-all"
                         >
                           거절
                         </button>
