@@ -318,12 +318,12 @@ export default function FriendsPage() {
                 onChange={(e) => setPhone(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSendRequest()}
                 placeholder="010-0000-0000"
-                className="flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm text-gray-900 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                className="flex-1 min-w-0 rounded-xl border border-gray-200 px-3 py-2.5 text-base text-gray-900 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
               />
               <button
                 onClick={handleSendRequest}
                 disabled={addLoading || !phone.trim()}
-                className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50 transition-all"
+                className="shrink-0 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 transition-all"
               >
                 {addLoading ? "..." : "요청"}
               </button>
