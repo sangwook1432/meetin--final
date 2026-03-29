@@ -434,181 +434,167 @@ export default function AdminPage() {
 
       {/* ── 탭 1: 재학증명서 심사 ─────────────────────────────────── */}
       {tab === "verify" && (
-        <div className="max-w-6xl mx-auto px-6 py-6 flex gap-6">
-          {/* 왼쪽: 목록 */}
-          <div className="w-1/2 flex flex-col gap-4">
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { label: "대기", key: "PENDING", color: "border-yellow-300 bg-yellow-50 text-yellow-800" },
-                { label: "승인", key: "VERIFIED", color: "border-green-300 bg-green-50 text-green-800" },
-                { label: "반려", key: "REJECTED", color: "border-red-300 bg-red-50 text-red-800" },
-              ].map(({ label, key, color }) => (
-                <div key={key} className={`rounded-2xl border p-4 text-center ${color}`}>
-                  <div className="text-2xl font-black">{stats[key as keyof Stats] ?? 0}</div>
-                  <div className="text-xs font-medium mt-0.5">{label}</div>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex gap-2">
-              {STATUS_FILTER_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => setStatusFilter(opt.value)}
-                  className={`flex-1 rounded-xl py-2 text-sm font-semibold border-2 transition-all ${
-                    statusFilter === opt.value
-                      ? `${opt.color} border-current`
-                      : "border-gray-200 text-gray-500 bg-white"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-
-            {verifyError ? (
-              <div className="rounded-xl bg-red-50 border border-red-100 p-4 text-sm text-red-600">
-                {verifyError}
-                <button onClick={fetchVerifyData} className="ml-3 underline">다시 시도</button>
+        <div className="max-w-6xl mx-auto px-6 py-6 flex flex-col gap-4">
+          {/* 통계 */}
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: "대기", key: "PENDING", color: "border-yellow-300 bg-yellow-50 text-yellow-800" },
+              { label: "승인", key: "VERIFIED", color: "border-green-300 bg-green-50 text-green-800" },
+              { label: "반려", key: "REJECTED", color: "border-red-300 bg-red-50 text-red-800" },
+            ].map(({ label, key, color }) => (
+              <div key={key} className={`rounded-2xl border p-4 text-center ${color}`}>
+                <div className="text-2xl font-black">{stats[key as keyof Stats] ?? 0}</div>
+                <div className="text-xs font-medium mt-0.5">{label}</div>
               </div>
-            ) : verifyLoading ? (
-              <div className="flex flex-col gap-2">
-                {[...Array(5)].map((_, i) => (
-                  <div key={i} className="h-16 animate-pulse rounded-xl bg-gray-100" />
-                ))}
-              </div>
-            ) : users.length === 0 ? (
-              <div className="rounded-2xl bg-white border border-gray-100 p-8 text-center text-sm text-gray-400">
-                해당 상태의 유저가 없습니다
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2 overflow-y-auto max-h-[60vh] pr-1">
-                {users.map((u) => (
-                  <button
-                    key={u.user_id}
-                    onClick={() => handleSelectUser(u)}
-                    className={`w-full text-left rounded-xl border p-4 transition-all ${
-                      selectedUser?.user_id === u.user_id
-                        ? "border-blue-400 bg-blue-50"
-                        : "border-gray-100 bg-white hover:border-gray-200"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-gray-900">
-                          {u.nickname ?? "닉네임 없음"}
-                          <span className="ml-2 text-xs text-gray-400">#{u.user_id}</span>
-                        </p>
-                        <p className="text-xs text-gray-500 mt-0.5">{u.username}</p>
-                        {u.university && <p className="text-xs text-gray-400 mt-0.5">{u.university}</p>}
-                        <p className="text-xs text-gray-400 mt-0.5">
-                          {[u.major, u.entry_year ? `${u.entry_year}학번` : null, u.age ? `${u.age}세` : null].filter(Boolean).join(" · ")}
-                        </p>
-                      </div>
-                      <span className="text-xs bg-gray-100 text-gray-600 rounded-full px-2 py-0.5">
-                        서류 {u.doc_count}건
-                      </span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
+            ))}
           </div>
 
-          {/* 오른쪽: 서류 + 액션 */}
-          <div className="w-1/2">
-            {!selectedUser ? (
-              <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-12 text-center text-sm text-gray-400">
-                왼쪽 목록에서 유저를 선택하세요
-              </div>
-            ) : (
-              <div className="rounded-2xl bg-white border border-gray-100 p-5 flex flex-col gap-5">
-                <div>
-                  <h2 className="text-base font-bold text-gray-900">
-                    {selectedUser.nickname ?? selectedUser.username}
-                    <span className="ml-2 text-xs text-gray-400">({selectedUser.verification_status})</span>
-                  </h2>
-                  <p className="text-sm text-gray-500 mt-0.5">{selectedUser.username}</p>
-                  {selectedUser.university && <p className="text-sm text-gray-500">{selectedUser.university}</p>}
-                  <p className="text-sm text-gray-500 mt-0.5">
-                    {[selectedUser.major, selectedUser.entry_year ? `${selectedUser.entry_year}학번` : null, selectedUser.age ? `${selectedUser.age}세` : null].filter(Boolean).join(" · ") || "전공/학번/나이 미입력"}
-                  </p>
-                </div>
+          {/* 필터 */}
+          <div className="flex gap-2">
+            {STATUS_FILTER_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setStatusFilter(opt.value)}
+                className={`flex-1 rounded-xl py-2 text-sm font-semibold border-2 transition-all ${
+                  statusFilter === opt.value
+                    ? `${opt.color} border-current`
+                    : "border-gray-200 text-gray-500 bg-white"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
 
-                <div>
-                  <p className="text-sm font-semibold text-gray-700 mb-3">제출 서류 ({docs.length}건)</p>
-                  {docs.length === 0 ? (
-                    <p className="text-sm text-gray-400">제출된 서류가 없습니다</p>
-                  ) : (
-                    <div className="flex flex-col gap-3">
-                      {docs.map((doc) => (
-                        <div key={doc.id} className="rounded-xl border border-gray-100 overflow-hidden">
-                          <div className="bg-gray-50 px-4 py-2 flex items-center justify-between">
-                            <span className="text-xs font-semibold text-gray-700">
-                              {DOC_TYPE_LABEL[doc.doc_type] ?? doc.doc_type}
-                            </span>
-                            <span className={`text-xs rounded-full px-2 py-0.5 ${
-                              doc.status === "REVIEWED" ? "bg-gray-200 text-gray-600" : "bg-yellow-100 text-yellow-700"
-                            }`}>
-                              {doc.status === "REVIEWED" ? "검토됨" : "제출됨"}
-                            </span>
-                          </div>
-                          {doc.file_url.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
-                            <img src={resolveFileUrl(doc.file_url)} alt={doc.doc_type}
-                              className="w-full max-h-48 object-contain bg-white"
-                              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                            />
+          {/* 유저 목록 (아코디언) */}
+          {verifyError ? (
+            <div className="rounded-xl bg-red-50 border border-red-100 p-4 text-sm text-red-600">
+              {verifyError}
+              <button onClick={fetchVerifyData} className="ml-3 underline">다시 시도</button>
+            </div>
+          ) : verifyLoading ? (
+            <div className="flex flex-col gap-2">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="h-16 animate-pulse rounded-xl bg-gray-100" />
+              ))}
+            </div>
+          ) : users.length === 0 ? (
+            <div className="rounded-2xl bg-white border border-gray-100 p-8 text-center text-sm text-gray-400">
+              해당 상태의 유저가 없습니다
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {users.map((u) => {
+                const isExpanded = selectedUser?.user_id === u.user_id;
+                return (
+                  <div key={u.user_id} className="rounded-xl border border-gray-100 bg-white overflow-hidden">
+                    {/* 헤더 (탭) */}
+                    <button
+                      onClick={() => isExpanded ? setSelectedUser(null) : handleSelectUser(u)}
+                      className={`w-full text-left p-4 transition-all ${isExpanded ? "bg-blue-50 border-b border-blue-100" : ""}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">
+                            {u.nickname ?? "닉네임 없음"}
+                            <span className="ml-2 text-xs text-gray-400">#{u.user_id}</span>
+                          </p>
+                          <p className="text-xs text-gray-500 mt-0.5">{u.username}</p>
+                          {u.university && <p className="text-xs text-gray-400 mt-0.5">{u.university}</p>}
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            {[u.major, u.entry_year ? `${u.entry_year}학번` : null, u.age ? `${u.age}세` : null].filter(Boolean).join(" · ")}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-xs bg-gray-100 text-gray-600 rounded-full px-2 py-0.5">
+                            서류 {u.doc_count}건
+                          </span>
+                          <span className={`text-gray-400 text-sm transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}>▾</span>
+                        </div>
+                      </div>
+                    </button>
+
+                    {/* 펼쳐지는 본문 */}
+                    {isExpanded && selectedUser && (
+                      <div className="p-5 flex flex-col gap-5">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-700 mb-3">제출 서류 ({docs.length}건)</p>
+                          {docs.length === 0 ? (
+                            <p className="text-sm text-gray-400">제출된 서류가 없습니다</p>
                           ) : (
-                            <div className="px-4 py-3">
-                              <a href={resolveFileUrl(doc.file_url)} target="_blank" rel="noopener noreferrer"
-                                className="text-sm text-blue-600 underline break-all"
-                              >
-                                파일 열기 →
-                              </a>
+                            <div className="flex flex-col gap-3">
+                              {docs.map((doc) => (
+                                <div key={doc.id} className="rounded-xl border border-gray-100 overflow-hidden">
+                                  <div className="bg-gray-50 px-4 py-2 flex items-center justify-between">
+                                    <span className="text-xs font-semibold text-gray-700">
+                                      {DOC_TYPE_LABEL[doc.doc_type] ?? doc.doc_type}
+                                    </span>
+                                    <span className={`text-xs rounded-full px-2 py-0.5 ${
+                                      doc.status === "REVIEWED" ? "bg-gray-200 text-gray-600" : "bg-yellow-100 text-yellow-700"
+                                    }`}>
+                                      {doc.status === "REVIEWED" ? "검토됨" : "제출됨"}
+                                    </span>
+                                  </div>
+                                  {doc.file_url.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
+                                    <img src={resolveFileUrl(doc.file_url)} alt={doc.doc_type}
+                                      className="w-full max-h-48 object-contain bg-white"
+                                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                                    />
+                                  ) : (
+                                    <div className="px-4 py-3">
+                                      <a href={resolveFileUrl(doc.file_url)} target="_blank" rel="noopener noreferrer"
+                                        className="text-sm text-blue-600 underline break-all"
+                                      >
+                                        파일 열기 →
+                                      </a>
+                                    </div>
+                                  )}
+                                  {doc.note && (
+                                    <div className="px-4 py-2 bg-gray-50 text-xs text-gray-500">메모: {doc.note}</div>
+                                  )}
+                                </div>
+                              ))}
                             </div>
                           )}
-                          {doc.note && (
-                            <div className="px-4 py-2 bg-gray-50 text-xs text-gray-500">메모: {doc.note}</div>
-                          )}
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
 
-                {selectedUser.verification_status === "PENDING" && (
-                  <div className="flex flex-col gap-3 border-t border-gray-100 pt-4">
-                    <button onClick={handleApprove} disabled={actionLoading}
-                      className="w-full rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50 transition-all"
-                    >
-                      {actionLoading ? "처리 중..." : "✅ 승인하기"}
-                    </button>
-                    <div className="flex flex-col gap-2">
-                      <textarea value={rejectNote} onChange={(e) => setRejectNote(e.target.value)}
-                        placeholder="반려 사유를 입력하세요 (필수)" rows={2}
-                        className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-red-300 focus:outline-none resize-none"
-                      />
-                      <button onClick={handleReject} disabled={actionLoading || !rejectNote.trim()}
-                        className="w-full rounded-xl border border-red-300 bg-white py-3 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-40 transition-all"
-                      >
-                        {actionLoading ? "처리 중..." : "❌ 반려하기"}
-                      </button>
-                    </div>
+                        {selectedUser.verification_status === "PENDING" && (
+                          <div className="flex flex-col gap-3 border-t border-gray-100 pt-4">
+                            <button onClick={handleApprove} disabled={actionLoading}
+                              className="w-full rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50 transition-all"
+                            >
+                              {actionLoading ? "처리 중..." : "✅ 승인하기"}
+                            </button>
+                            <div className="flex flex-col gap-2">
+                              <textarea value={rejectNote} onChange={(e) => setRejectNote(e.target.value)}
+                                placeholder="반려 사유를 입력하세요 (필수)" rows={2}
+                                className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-red-300 focus:outline-none resize-none"
+                              />
+                              <button onClick={handleReject} disabled={actionLoading || !rejectNote.trim()}
+                                className="w-full rounded-xl border border-red-300 bg-white py-3 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-40 transition-all"
+                              >
+                                {actionLoading ? "처리 중..." : "❌ 반려하기"}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        {selectedUser.verification_status === "VERIFIED" && (
+                          <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-700 font-semibold">
+                            ✅ 이미 승인된 유저입니다
+                          </div>
+                        )}
+                        {selectedUser.verification_status === "REJECTED" && (
+                          <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 font-semibold">
+                            ❌ 반려된 유저입니다
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                )}
-                {selectedUser.verification_status === "VERIFIED" && (
-                  <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-700 font-semibold">
-                    ✅ 이미 승인된 유저입니다
-                  </div>
-                )}
-                {selectedUser.verification_status === "REJECTED" && (
-                  <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 font-semibold">
-                    ❌ 반려된 유저입니다
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
