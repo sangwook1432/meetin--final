@@ -105,7 +105,7 @@ export function AppShell({
   );
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
+    <div className={`flex flex-col bg-gray-50 ${noNav ? "h-screen overflow-hidden" : "min-h-screen"}`}>
       {/* 상단 헤더 */}
       {!noHeader && (
         <header className="sticky top-0 z-20 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-3 shadow-sm">
@@ -145,7 +145,7 @@ export function AppShell({
       </main>
 
       {/* 사업자 정보 푸터 */}
-      <footer className="border-t border-gray-100 bg-white px-5 pb-16 text-xs text-gray-400 overflow-hidden">
+      {!noNav && <footer className="border-t border-gray-100 bg-white px-5 pb-16 text-xs text-gray-400 overflow-hidden">
         <button
           onClick={() => setBizOpen((v) => !v)}
           className="flex w-full items-center justify-between py-1.5 text-gray-400"
@@ -166,7 +166,7 @@ export function AppShell({
             </div>
           </div>
         )}
-      </footer>
+      </footer>}
 
       {/* 바텀 탭 */}
       {!noNav && <nav className="fixed bottom-0 left-0 right-0 z-20 flex border-t border-gray-100 bg-white">
