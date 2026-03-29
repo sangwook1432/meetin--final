@@ -94,6 +94,12 @@ export default function WalletPage() {
   } | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
+  useEffect(() => {
+    const anyOpen = showChargeModal || showAccountModal || showWithdrawModal;
+    document.body.style.overflow = anyOpen ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [showChargeModal, showAccountModal, showWithdrawModal]);
+
   const loadData = async () => {
     try {
       const [wallet, txData, account] = await Promise.all([

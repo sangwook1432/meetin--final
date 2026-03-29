@@ -510,6 +510,11 @@ function VoteModal({
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
+
   const hasCancelVote = roomInfo.cancel_vote_count > 0;
   const hasScheduleVote = roomInfo.schedule_vote_count > 0 && !roomInfo.schedule?.confirmed;
   const hasNoVote = !hasCancelVote && !hasScheduleVote;
@@ -661,6 +666,11 @@ function LeaveModal({
   const [friendsLoading, setFriendsLoading] = useState(false);
   const [selectedFriendId, setSelectedFriendId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
   const [error, setError] = useState<string | null>(null);
 
   const loadFriends = async () => {
@@ -860,6 +870,11 @@ function ScheduleModal({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
+
+  useEffect(() => {
     getMeetingSchedule(meetingId).then((s) => {
       if (s) {
         setDate(s.date ?? "");
@@ -1052,6 +1067,11 @@ function ReportModal({
   onClose: () => void;
 }) {
   const [reason, setReason] = useState<ReportReason | null>(null);
+
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
   const [detail, setDetail] = useState("");
   const [step, setStep] = useState<"select" | "confirm">("select");
   const [loading, setLoading] = useState(false);
@@ -1173,6 +1193,11 @@ function TransferHostModal({
   onClose: () => void;
 }) {
   const [loading, setLoading] = useState<number | null>(null);
+
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
 
   const handleSelect = async (userId: number) => {
     if (!confirm(`이 멤버에게 호스트를 넘기시겠습니까?`)) return;

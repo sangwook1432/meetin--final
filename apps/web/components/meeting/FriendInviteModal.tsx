@@ -27,6 +27,11 @@ export function FriendInviteModal({ meetingId, userTeam, onClose, onInvited }: F
   const [inviting, setInviting] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
+
+  useEffect(() => {
     listFriends()
       .then((res) => {
         const genderFilter = userTeam === "MALE" ? "MALE" : "FEMALE";
