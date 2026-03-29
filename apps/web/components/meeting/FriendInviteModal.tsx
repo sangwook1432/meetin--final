@@ -89,7 +89,7 @@ export function FriendInviteModal({ meetingId, userTeam, onClose, onInvited }: F
           </div>
           <button
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            className="flex h-11 w-11 items-center justify-center rounded-full text-gray-400 active:bg-gray-100 active:text-gray-600"
           >
             ✕
           </button>

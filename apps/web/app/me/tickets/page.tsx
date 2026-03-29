@@ -117,7 +117,7 @@ export default function TicketsPage() {
               {balance < 2_000 && (
                 <button
                   onClick={() => router.push("/me/wallet")}
-                  className="mt-3 w-full rounded-xl bg-gray-100 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-200 transition-colors"
+                  className="mt-3 w-full rounded-xl bg-gray-100 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-200 active:bg-gray-300 transition-colors"
                 >
                   잔액 충전하러 가기 →
                 </button>

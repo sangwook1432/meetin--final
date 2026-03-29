@@ -250,7 +250,7 @@ export default function MyProfilePage() {
                   <div className="flex gap-2">
                     <button
                       onClick={() => setEditingBio(false)}
-                      className="rounded-lg border border-gray-200 px-3 py-1 text-xs text-gray-500 hover:bg-gray-50"
+                      className="rounded-lg border border-gray-200 px-3 py-1 text-xs text-gray-500 hover:bg-gray-50 active:bg-gray-100"
                     >
                       취소
                     </button>
@@ -365,14 +365,14 @@ export default function MyProfilePage() {
                       <div className="flex justify-end gap-2">
                         <button
                           onClick={() => setEditingQa(null)}
-                          className="rounded-lg border border-gray-200 px-3 py-1 text-xs text-gray-500 hover:bg-gray-50"
+                          className="rounded-lg border border-gray-200 px-3 py-1 text-xs text-gray-500 hover:bg-gray-50 active:bg-gray-100"
                         >
                           취소
                         </button>
                         <button
                           onClick={() => saveQaAnswer(n)}
                           disabled={qaSaving}
-                          className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+                          className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-bold text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50"
                         >
                           {qaSaving ? "저장 중…" : "저장"}
                         </button>
@@ -434,13 +434,13 @@ export default function MyProfilePage() {
             <div className="mt-4 flex gap-3">
               <button
                 onClick={() => setSelected(null)}
-                className="flex-1 rounded-xl border border-white/30 py-2.5 text-sm font-semibold text-white hover:bg-white/10"
+                className="flex-1 rounded-xl border border-white/30 py-2.5 text-sm font-semibold text-white hover:bg-white/10 active:bg-white/20"
               >
                 닫기
               </button>
               <button
                 onClick={() => handleDelete(selected)}
-                className="flex-1 rounded-xl bg-red-500 py-2.5 text-sm font-bold text-white hover:bg-red-600"
+                className="flex-1 rounded-xl bg-red-500 py-2.5 text-sm font-bold text-white hover:bg-red-600 active:bg-red-700"
               >
                 삭제
               </button>

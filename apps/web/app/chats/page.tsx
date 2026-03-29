@@ -72,7 +72,7 @@ export default function ChatsPage() {
             </p>
             <button
               onClick={() => router.push("/discover")}
-              className="mt-5 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-blue-700 transition-all"
+              className="mt-5 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-blue-700 active:bg-blue-800 transition-all"
             >
               미팅 찾아보기 →
             </button>

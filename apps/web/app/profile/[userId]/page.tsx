@@ -86,7 +86,7 @@ export default function UserProfilePage() {
         {/* 뒤로가기 */}
         <button
           onClick={() => router.back()}
-          className="absolute left-4 top-[60px] z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/30 text-white backdrop-blur-sm"
+          className="absolute left-4 top-[60px] z-10 flex h-11 w-11 items-center justify-center rounded-full bg-black/30 text-white backdrop-blur-sm active:bg-black/50"
         >
           ←
         </button>

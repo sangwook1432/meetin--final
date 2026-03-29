@@ -112,7 +112,7 @@ export default function VacanciesPage() {
             </p>
             <button
               onClick={() => router.push("/discover")}
-              className="mt-2 rounded-xl border border-blue-200 px-5 py-2.5 text-sm font-medium text-blue-600 hover:bg-blue-50"
+              className="mt-2 rounded-xl border border-blue-200 px-5 py-2.5 text-sm font-medium text-blue-600 hover:bg-blue-50 active:bg-blue-100"
             >
               미팅 탐색하기 →
             </button>

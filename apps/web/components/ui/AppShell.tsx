@@ -121,7 +121,7 @@ export function AppShell({
               ) : (
                 <Link
                   href="/me/docs"
-                  className="rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-semibold text-yellow-700 hover:bg-yellow-200"
+                  className="rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-semibold text-yellow-700 hover:bg-yellow-200 active:bg-yellow-200"
                 >
                   인증 필요 →
                 </Link>
@@ -129,7 +129,7 @@ export function AppShell({
               {user.is_admin && (
                 <Link
                   href="/admin"
-                  className="rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-semibold text-purple-700 hover:bg-purple-200"
+                  className="rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-semibold text-purple-700 hover:bg-purple-200 active:bg-purple-200"
                 >
                   🛡️ 관리자
                 </Link>
@@ -161,8 +161,8 @@ export function AppShell({
             <p>통신판매업신고번호: 신고 진행 중</p>
             <p>연락처: adamjeon2003@gmail.com</p>
             <div className="flex gap-3 pt-1">
-              <a href="/terms" className="underline hover:text-gray-600">이용약관</a>
-              <a href="/privacy" className="underline hover:text-gray-600">개인정보처리방침</a>
+              <a href="/terms" className="underline hover:text-gray-600 active:text-gray-600">이용약관</a>
+              <a href="/privacy" className="underline hover:text-gray-600 active:text-gray-600">개인정보처리방침</a>
             </div>
           </div>
         )}
@@ -177,7 +177,7 @@ export function AppShell({
               key={tab.href}
               href={tab.href}
               className={`flex flex-1 flex-col items-center py-2.5 text-xs transition-colors ${
-                active ? "text-blue-600" : "text-gray-400 hover:text-gray-600"
+                active ? "text-blue-600" : "text-gray-400 hover:text-gray-600 active:text-gray-800"
               }`}
             >
               <span className="text-lg leading-none">{tab.icon}</span>
@@ -192,7 +192,7 @@ export function AppShell({
         <button
           onClick={() => setMenuOpen(true)}
           className={`flex flex-1 flex-col items-center py-2.5 text-xs transition-colors ${
-            menuActive ? "text-blue-600" : "text-gray-400 hover:text-gray-600"
+            menuActive ? "text-blue-600" : "text-gray-400 hover:text-gray-600 active:text-gray-800"
           }`}
         >
           <span className="text-lg leading-none">☰</span>

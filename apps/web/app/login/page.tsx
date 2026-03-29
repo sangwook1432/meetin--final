@@ -85,7 +85,7 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={() => setModal("find-id")}
-            className="hover:text-blue-600 hover:underline transition-colors"
+            className="hover:text-blue-600 hover:underline active:text-blue-600 active:underline transition-colors"
           >
             아이디 찾기
           </button>
@@ -93,7 +93,7 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={() => setModal("reset-password")}
-            className="hover:text-blue-600 hover:underline transition-colors"
+            className="hover:text-blue-600 hover:underline active:text-blue-600 active:underline transition-colors"
           >
             비밀번호 찾기
           </button>
