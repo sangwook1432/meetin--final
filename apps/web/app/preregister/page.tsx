@@ -153,12 +153,12 @@ export default function PreregisterPage() {
 
         {/* ── 1. 헤더 ────────────────────────────────────────────── */}
         <div className="mb-8 text-center">
-          <p className="mb-3 text-[11px] font-bold tracking-[0.25em] text-blue-500">MEETIN.</p>
+          <p className="mb-3 text-xs font-bold tracking-[0.25em] text-blue-500">MEETIN.</p>
           <h1 className="text-[1.85rem] font-black leading-tight tracking-tight text-gray-900">
             같은 대학생끼리<br />팀 미팅 매칭
           </h1>
           <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-1.5">
-            <span className="text-[11px] font-bold text-white">선착순 150명만 무료 매칭권 제공</span>
+            <span className="text-xs font-bold text-white">선착순 150명만 무료 매칭권 제공</span>
           </div>
         </div>
 
@@ -172,7 +172,7 @@ export default function PreregisterPage() {
             </p>
             <p className="mt-0.5 text-xs font-semibold text-pink-500">여자</p>
             {femaleLabel && (
-              <p className={`mt-1 text-[11px] font-bold ${femaleLabel.cls}`}>{femaleLabel.text}</p>
+              <p className={`mt-1 text-xs font-bold ${femaleLabel.cls}`}>{femaleLabel.text}</p>
             )}
             {stats && (
               <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-pink-100">
@@ -191,7 +191,7 @@ export default function PreregisterPage() {
             </p>
             <p className="mt-0.5 text-xs font-semibold text-blue-500">남자</p>
             {maleLabel && (
-              <p className={`mt-1 text-[11px] font-bold ${maleLabel.cls}`}>{maleLabel.text}</p>
+              <p className={`mt-1 text-xs font-bold ${maleLabel.cls}`}>{maleLabel.text}</p>
             )}
             {stats && (
               <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-blue-100">
@@ -206,7 +206,7 @@ export default function PreregisterPage() {
 
         {/* ── 5. 혜택 섹션 ─────────────────────────────────────────── */}
         <div className="mb-7 rounded-2xl border border-amber-100 bg-amber-50 px-5 py-4">
-          <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-amber-600">🎁 사전예약 혜택</p>
+          <p className="mb-3 text-xs font-bold uppercase tracking-widest text-amber-600">🎁 사전예약 혜택</p>
           <div className="space-y-2.5">
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-600">여자</span>
@@ -271,7 +271,7 @@ export default function PreregisterPage() {
         {/* ── 신뢰 섹션 (1단계에서만 표시) ────────────────────────── */}
         {step === "phone" && (
           <div className="mt-4 rounded-2xl border border-green-100 bg-green-50 px-5 py-4">
-            <p className="mb-2.5 text-[10px] font-bold uppercase tracking-widest text-green-600">안전하게 참여하세요</p>
+            <p className="mb-2.5 text-xs font-bold uppercase tracking-widest text-green-600">안전하게 참여하세요</p>
             <ul className="space-y-2">
               {[
                 "학교 인증된 사람만 참여",
