@@ -115,7 +115,7 @@ export default function LoginPage() {
 
 // ─── 공통 스타일 ──────────────────────────────────────────
 const inputCls =
-  "w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all";
+  "w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-base text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all";
 
 // ─── OTP 공통 훅 로직 (모달 내부에서 재사용) ────────────────
 function useOtpFlow() {

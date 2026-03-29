@@ -241,7 +241,7 @@ export default function MyProfilePage() {
                   onChange={(e) => setBioValue(e.target.value)}
                   maxLength={40}
                   rows={2}
-                  className="w-full resize-none rounded-xl border border-blue-300 bg-blue-50 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500"
+                  className="w-full resize-none rounded-xl border border-blue-300 bg-blue-50 px-3 py-2 text-base text-gray-900 outline-none focus:border-blue-500"
                   placeholder="자기소개를 입력하세요 (최대 40자)"
                   autoFocus
                 />
@@ -358,7 +358,7 @@ export default function MyProfilePage() {
                         onChange={(e) => setQaInput(e.target.value)}
                         maxLength={100}
                         placeholder={placeholder}
-                        className="w-full rounded-xl border border-blue-300 bg-blue-50 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500"
+                        className="w-full rounded-xl border border-blue-300 bg-blue-50 px-3 py-2 text-base text-gray-900 outline-none focus:border-blue-500"
                         autoFocus
                         onKeyDown={(e) => e.key === "Enter" && saveQaAnswer(n)}
                       />

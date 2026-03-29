@@ -417,7 +417,7 @@ export default function ChatRoomPage() {
               onKeyDown={handleKeyDown}
               placeholder="메시지를 입력하세요..."
               rows={1}
-              className="flex-1 resize-none rounded-2xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-blue-400 focus:bg-white transition-all max-h-32 overflow-y-auto"
+              className="flex-1 resize-none rounded-2xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-base text-gray-900 placeholder-gray-400 outline-none focus:border-blue-400 focus:bg-white transition-all max-h-32 overflow-y-auto"
               style={{ minHeight: "44px" }}
             />
             <button
@@ -532,10 +532,10 @@ function VoteModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
-      <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-10 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-modal-safe max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="mb-5 flex items-center justify-between">
           <h2 className="text-lg font-bold text-gray-900">🗳️ 투표함</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+          <button onClick={onClose} className="flex h-11 w-11 items-center justify-center rounded-full text-gray-400 active:bg-gray-100 text-xl">✕</button>
         </div>
 
         {error && (
@@ -677,10 +677,10 @@ function LeaveModal({
   if (isClosed) {
     return (
       <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
-        <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-10" onClick={(e) => e.stopPropagation()}>
+        <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-modal-safe" onClick={(e) => e.stopPropagation()}>
           <div className="mb-5 flex items-center justify-between">
             <h2 className="text-lg font-bold text-gray-900">채팅방 나가기</h2>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+            <button onClick={onClose} className="flex h-11 w-11 items-center justify-center rounded-full text-gray-400 active:bg-gray-100 text-xl">✕</button>
           </div>
           <p className="text-sm text-gray-600 mb-6">정말 나가시겠습니까?</p>
           {error && <p className="text-xs text-red-500 mb-4">{error}</p>}
@@ -747,10 +747,10 @@ function LeaveModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
-      <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-10 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-modal-safe max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="mb-5 flex items-center justify-between">
           <h2 className="text-lg font-bold text-gray-900">채팅방 나가기</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+          <button onClick={onClose} className="flex h-11 w-11 items-center justify-center rounded-full text-gray-400 active:bg-gray-100 text-xl">✕</button>
         </div>
 
         {step === "choice" && (
@@ -884,10 +884,10 @@ function ScheduleModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
-      <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-10" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-modal-safe" onClick={(e) => e.stopPropagation()}>
         <div className="mb-5 flex items-center justify-between">
           <h2 className="text-lg font-bold text-gray-900">📅 미팅 일정 제안</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+          <button onClick={onClose} className="flex h-11 w-11 items-center justify-center rounded-full text-gray-400 active:bg-gray-100 text-xl">✕</button>
         </div>
         <div className="space-y-4">
           <div>
@@ -1080,10 +1080,10 @@ function ReportModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
-      <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-10" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-modal-safe" onClick={(e) => e.stopPropagation()}>
         <div className="mb-5 flex items-center justify-between">
           <h2 className="text-lg font-bold text-gray-900">⚑ 신고</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+          <button onClick={onClose} className="flex h-11 w-11 items-center justify-center rounded-full text-gray-400 active:bg-gray-100 text-xl">✕</button>
         </div>
 
         {done ? (
@@ -1183,10 +1183,10 @@ function TransferHostModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
-      <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-10" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-modal-safe" onClick={(e) => e.stopPropagation()}>
         <div className="mb-5 flex items-center justify-between">
           <h2 className="text-lg font-bold text-gray-900">👑 호스트 넘기기</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+          <button onClick={onClose} className="flex h-11 w-11 items-center justify-center rounded-full text-gray-400 active:bg-gray-100 text-xl">✕</button>
         </div>
         {members.length === 0 ? (
           <p className="text-center text-sm text-gray-400 py-4">넘길 수 있는 멤버가 없습니다.</p>

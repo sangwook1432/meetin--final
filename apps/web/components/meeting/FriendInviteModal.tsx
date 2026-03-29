@@ -76,7 +76,7 @@ export function FriendInviteModal({ meetingId, userTeam, onClose, onInvited }: F
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-8 shadow-2xl max-h-[80vh] flex flex-col"
+        className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-modal-safe shadow-2xl max-h-[80vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 헤더 */}

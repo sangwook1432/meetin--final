@@ -348,10 +348,10 @@ export default function WalletPage() {
       {/* 충전 모달 */}
       {showChargeModal && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40">
-          <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-10">
+          <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-modal-safe">
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-lg font-bold text-gray-900">잔액 충전</h2>
-              <button onClick={() => setShowChargeModal(false)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+              <button onClick={() => setShowChargeModal(false)} className="flex h-11 w-11 items-center justify-center rounded-full text-gray-400 active:bg-gray-100 text-xl">✕</button>
             </div>
             <div className="grid grid-cols-2 gap-3 mb-4">
               {CHARGE_OPTIONS.map((opt) => (
@@ -369,7 +369,7 @@ export default function WalletPage() {
               <div className="flex items-center gap-2">
                 <input type="number" value={chargeAmount} onChange={(e) => setChargeAmount(Number(e.target.value))}
                   min={1000} max={500000} step={1000}
-                  className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none focus:border-blue-400"
+                  className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-base outline-none focus:border-blue-400"
                 />
                 <span className="text-sm text-gray-500">원</span>
               </div>
@@ -391,17 +391,17 @@ export default function WalletPage() {
       {/* 계좌 등록 모달 */}
       {showAccountModal && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40">
-          <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-10">
+          <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-modal-safe">
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-lg font-bold text-gray-900">출금 계좌 등록</h2>
-              <button onClick={() => setShowAccountModal(false)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+              <button onClick={() => setShowAccountModal(false)} className="flex h-11 w-11 items-center justify-center rounded-full text-gray-400 active:bg-gray-100 text-xl">✕</button>
             </div>
 
             <div className="space-y-4 mb-6">
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-gray-500">은행</label>
                 <select value={bankName} onChange={(e) => setBankName(e.target.value)}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 outline-none focus:border-blue-400"
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-base text-gray-900 outline-none focus:border-blue-400"
                 >
                   <option value="">은행 선택</option>
                   {BANKS.map((b) => <option key={b} value={b}>{b}</option>)}
@@ -411,14 +411,14 @@ export default function WalletPage() {
                 <label className="mb-1.5 block text-xs font-medium text-gray-500">계좌번호</label>
                 <input type="text" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)}
                   placeholder="- 없이 숫자만 입력"
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-blue-400"
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-base text-gray-900 placeholder-gray-400 outline-none focus:border-blue-400"
                 />
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-gray-500">예금주</label>
                 <input type="text" value={accountHolder} onChange={(e) => setAccountHolder(e.target.value)}
                   placeholder="예금주 실명"
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-blue-400"
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-base text-gray-900 placeholder-gray-400 outline-none focus:border-blue-400"
                 />
               </div>
             </div>
@@ -436,10 +436,10 @@ export default function WalletPage() {
       {/* 출금 신청 모달 */}
       {showWithdrawModal && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40">
-          <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-10">
+          <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-modal-safe">
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-lg font-bold text-gray-900">잔액 출금</h2>
-              <button onClick={() => setShowWithdrawModal(false)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+              <button onClick={() => setShowWithdrawModal(false)} className="flex h-11 w-11 items-center justify-center rounded-full text-gray-400 active:bg-gray-100 text-xl">✕</button>
             </div>
 
             <div className="mb-4 rounded-xl bg-gray-50 px-4 py-3">
@@ -471,7 +471,7 @@ export default function WalletPage() {
                     fetchWithdrawPreview(v);
                   }}
                   min={1000} max={1000000} step={1000}
-                  className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 outline-none focus:border-orange-400"
+                  className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-base text-gray-900 outline-none focus:border-orange-400"
                 />
                 <span className="text-sm text-gray-500">원</span>
               </div>

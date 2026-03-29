@@ -140,7 +140,10 @@ export function AppShell({
       )}
 
       {/* 페이지 콘텐츠 */}
-      <main className={noPadding ? "flex-1 flex flex-col overflow-hidden" : "flex-1 pb-20"}>
+      <main
+        className={noPadding ? "flex-1 flex flex-col overflow-hidden" : "flex-1"}
+        style={!noPadding ? { paddingBottom: "calc(5rem + env(safe-area-inset-bottom, 0px))" } : undefined}
+      >
         {children}
       </main>
 
@@ -169,7 +172,7 @@ export function AppShell({
       </footer>}
 
       {/* 바텀 탭 */}
-      {!noNav && <nav className="fixed bottom-0 left-0 right-0 z-20 flex border-t border-gray-100 bg-white">
+      {!noNav && <nav className="fixed bottom-0 left-0 right-0 z-20 flex border-t border-gray-100 bg-white" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
         {TABS.map((tab) => {
           const active = pathname === tab.href || pathname.startsWith(tab.href + "/");
           return (
@@ -308,7 +311,7 @@ export function AppShell({
               </>
             )}
 
-            <div className="pb-safe pb-2" />
+            <div style={{ height: "max(0.5rem, env(safe-area-inset-bottom, 0px))" }} />
           </div>
         </div>
       )}
@@ -373,7 +376,7 @@ export function AppShell({
                 <span className="text-sm font-semibold text-gray-400">탈퇴하기</span>
               </button>
 
-              <div className="pb-safe pb-4" />
+              <div style={{ height: "max(1rem, env(safe-area-inset-bottom, 0px))" }} />
             </div>
           </div>
         </>
