@@ -69,6 +69,11 @@ export function SlotCard({ slot, index, isHost = false, onInviteClick }: SlotCar
             {index}
           </div>
         )}
+        {isHost && (
+          <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-400 text-[10px] shadow-sm">
+            👑
+          </span>
+        )}
       </Link>
 
       {/* 유저 정보 */}
@@ -79,11 +84,6 @@ export function SlotCard({ slot, index, isHost = false, onInviteClick }: SlotCar
           </span>
           {user.entry_label && (
             <span className="text-xs text-gray-500">{user.entry_label}</span>
-          )}
-          {isHost && (
-            <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-700">
-              👑 HOST
-            </span>
           )}
         </div>
         <div className="text-xs text-gray-500">
