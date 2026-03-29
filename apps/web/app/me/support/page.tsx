@@ -107,12 +107,14 @@ export default function SupportPage() {
 
                   {/* 아코디언 본문 */}
                   <div
-                    className="overflow-hidden transition-all duration-300 ease-in-out"
-                    style={{ maxHeight: isOpen ? "300px" : "0px" }}
+                    className="grid transition-all duration-300 ease-in-out"
+                    style={{ gridTemplateRows: isOpen ? "1fr" : "0fr" }}
                   >
-                    <p className="px-4 pb-4 pt-1 text-sm leading-relaxed text-gray-500">
-                      A. {item.answer}
-                    </p>
+                    <div className="overflow-hidden">
+                      <p className="px-4 pb-4 pt-1 text-sm leading-relaxed text-gray-500">
+                        A. {item.answer}
+                      </p>
+                    </div>
                   </div>
                 </div>
               );
