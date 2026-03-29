@@ -1141,12 +1141,12 @@ function TicketGrantTab() {
           onChange={(e) => setPhone(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSearch()}
           placeholder="01012345678"
-          className="flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-400"
+          className="flex-1 min-w-0 rounded-xl border border-gray-200 px-3 py-2.5 text-base text-gray-900 outline-none focus:border-blue-400"
         />
         <button
           onClick={handleSearch}
           disabled={searching || !phone.trim()}
-          className="rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+          className="shrink-0 whitespace-nowrap rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
         >
           {searching ? "검색 중..." : "검색"}
         </button>
