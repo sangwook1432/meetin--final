@@ -34,9 +34,13 @@ const MENU_ITEMS = [
 export function AppShell({
   children,
   noPadding = false,
+  noHeader = false,
+  noNav = false,
 }: {
   children: React.ReactNode;
   noPadding?: boolean;
+  noHeader?: boolean;
+  noNav?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -103,35 +107,37 @@ export function AppShell({
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       {/* 상단 헤더 */}
-      <header className="sticky top-0 z-20 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-3 shadow-sm">
-        <Link href="/discover" className="text-xl font-black tracking-tight text-gray-900">
-          MEETIN<span className="text-blue-600">.</span>
-        </Link>
-        {user && (
-          <div className="flex items-center gap-3 text-sm text-gray-500">
-            {user.verification_status === "VERIFIED" ? (
-              <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
-                ✓ 인증
-              </span>
-            ) : (
-              <Link
-                href="/me/docs"
-                className="rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-semibold text-yellow-700 hover:bg-yellow-200"
-              >
-                인증 필요 →
-              </Link>
-            )}
-            {user.is_admin && (
-              <Link
-                href="/admin"
-                className="rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-semibold text-purple-700 hover:bg-purple-200"
-              >
-                🛡️ 관리자
-              </Link>
-            )}
-          </div>
-        )}
-      </header>
+      {!noHeader && (
+        <header className="sticky top-0 z-20 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-3 shadow-sm">
+          <Link href="/discover" className="text-xl font-black tracking-tight text-gray-900">
+            MEETIN<span className="text-blue-600">.</span>
+          </Link>
+          {user && (
+            <div className="flex items-center gap-3 text-sm text-gray-500">
+              {user.verification_status === "VERIFIED" ? (
+                <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                  ✓ 인증
+                </span>
+              ) : (
+                <Link
+                  href="/me/docs"
+                  className="rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-semibold text-yellow-700 hover:bg-yellow-200"
+                >
+                  인증 필요 →
+                </Link>
+              )}
+              {user.is_admin && (
+                <Link
+                  href="/admin"
+                  className="rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-semibold text-purple-700 hover:bg-purple-200"
+                >
+                  🛡️ 관리자
+                </Link>
+              )}
+            </div>
+          )}
+        </header>
+      )}
 
       {/* 페이지 콘텐츠 */}
       <main className={noPadding ? "flex-1 flex flex-col overflow-hidden" : "flex-1 pb-20"}>
@@ -162,8 +168,8 @@ export function AppShell({
         )}
       </footer>
 
-      {/* 바텀 탭 — 항상 표시 */}
-      <nav className="fixed bottom-0 left-0 right-0 z-20 flex border-t border-gray-100 bg-white">
+      {/* 바텀 탭 */}
+      {!noNav && <nav className="fixed bottom-0 left-0 right-0 z-20 flex border-t border-gray-100 bg-white">
         {TABS.map((tab) => {
           const active = pathname === tab.href || pathname.startsWith(tab.href + "/");
           return (
@@ -192,7 +198,7 @@ export function AppShell({
           <span className="text-lg leading-none">☰</span>
           <span className="mt-0.5 font-medium" style={{ fontSize: "10px" }}>더보기</span>
         </button>
-      </nav>
+      </nav>}
 
       {/* 탈퇴 모달 */}
       {withdrawOpen && (

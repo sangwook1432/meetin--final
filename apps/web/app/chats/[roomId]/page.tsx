@@ -259,9 +259,9 @@ export default function ChatRoomPage() {
   const activeVoteCount = (hasCancelVote ? 1 : 0) + (hasScheduleVote ? 1 : 0);
 
   return (
-    <AppShell noPadding>
+    <AppShell noPadding noHeader noNav>
       {/* 헤더 */}
-      <div className="flex items-center gap-2 border-b border-gray-100 bg-white px-4 py-3 shadow-sm">
+      <div className="sticky top-0 z-20 flex items-center gap-2 border-b border-gray-100 bg-white px-4 py-3 shadow-sm">
         <button
           onClick={() => router.back()}
           className="rounded-full p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
@@ -366,7 +366,7 @@ export default function ChatRoomPage() {
       )}
 
       {/* 메시지 목록 */}
-      <div className="overflow-y-auto px-4 py-4 space-y-3" style={{ height: "calc(100vh - 56px - 80px - 60px)" }}>
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
         {messages.length === 0 ? (
           <div className="flex h-full items-center justify-center">
             <p className="text-sm text-gray-400">첫 인사를 건네보세요! 👋</p>
@@ -404,11 +404,11 @@ export default function ChatRoomPage() {
 
       {/* 입력창 */}
       {isClosed ? (
-        <div className="border-t border-gray-100 bg-gray-50 px-4 py-4 pb-20 text-center text-sm text-gray-400">
+        <div className="sticky bottom-0 border-t border-gray-100 bg-gray-50 px-4 py-4 text-center text-sm text-gray-400">
           채팅이 종료되었습니다
         </div>
       ) : (
-        <div className="border-t border-gray-100 bg-white px-4 py-3 pb-20">
+        <div className="sticky bottom-0 border-t border-gray-100 bg-white px-4 py-3">
           <div className="flex items-end gap-2">
             <textarea
               ref={textareaRef}
