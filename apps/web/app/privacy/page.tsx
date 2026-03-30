@@ -177,6 +177,7 @@ export default function PrivacyPage() {
                 </tbody>
               </table>
             </div>
+            <p className="mt-3 text-xs text-gray-500">위탁 처리는 개인정보 제3자 제공에 해당하지 않습니다. (제4조 참고)</p>
           </div>
 
           <div>
@@ -211,6 +212,10 @@ export default function PrivacyPage() {
                 </tbody>
               </table>
             </div>
+            <p className="mt-3 text-xs text-gray-500">
+              이용자는 개인정보의 국외 이전을 거부할 수 있으며, 이 경우 서비스 이용이 제한될 수 있습니다.<br />
+              국외 이전 관련 문의: adamjeon2003@gmail.com
+            </p>
           </div>
 
           <div>
@@ -221,6 +226,7 @@ export default function PrivacyPage() {
               <li>③ 종이 문서는 분쇄기로 분쇄하여 파기합니다.</li>
               <li>④ 재학 인증을 위해 수집된 재학증명서 또는 학생증 사진은 관리자의 승인 또는 거절 처리가 완료되는 즉시 서버에서 영구 삭제됩니다.</li>
               <li>⑤ 프로필 사진, 커버 사진, 게시물 사진은 회원 탈퇴 시 Cloudflare R2 스토리지에서 삭제됩니다.</li>
+              <li>⑥ 단, 이용자 간 분쟁 대응 및 서비스 운영을 위해 필요한 경우 일부 이용기록은 최대 6개월간 보관될 수 있습니다.</li>
             </ul>
           </div>
 
