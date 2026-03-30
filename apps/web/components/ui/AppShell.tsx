@@ -9,7 +9,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { deleteAccount } from "@/lib/api";
 
@@ -54,6 +54,11 @@ export function AppShell({
   const [withdrawAgreed, setWithdrawAgreed] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
   const [withdrawError, setWithdrawError] = useState<string | null>(null);
+
+  useEffect(() => {
+    document.body.style.overflow = menuOpen || withdrawOpen ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [menuOpen, withdrawOpen]);
 
   const walletBalance = user?.balance ?? 0;
   const ticketCount = user?.matching_tickets ?? 0;

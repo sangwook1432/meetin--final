@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, useEffect, FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
@@ -16,6 +16,11 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   const [modal, setModal] = useState<null | "find-id" | "reset-password">(null);
+
+  useEffect(() => {
+    document.body.style.overflow = modal ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [modal]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();

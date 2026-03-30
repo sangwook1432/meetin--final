@@ -81,6 +81,13 @@ export default function DiscoverPage() {
 
   // 재학 인증 서류 제출 여부 (localStorage 기반)
   const [docPending, setDocPending] = useState(false);
+
+  useEffect(() => {
+    const anyOpen = showModal || showNotifications || !!replacePending || postMeetingState !== null;
+    document.body.style.overflow = anyOpen ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [showModal, showNotifications, replacePending, postMeetingState]);
+
   useEffect(() => {
     if (user) {
       setDocPending(localStorage.getItem(`doc_pending_${user.id}`) === "1");

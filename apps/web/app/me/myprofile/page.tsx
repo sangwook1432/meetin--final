@@ -51,6 +51,11 @@ export default function MyProfilePage() {
   // ── 선택된 사진 (상세 뷰) ─────────────────────────────
   const [selected, setSelected] = useState<ProfilePost | null>(null);
 
+  useEffect(() => {
+    document.body.style.overflow = selected ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [selected]);
+
   // ── 10문 10답 ─────────────────────────────────────────
   const [qaAnswers, setQaAnswers] = useState<Record<string, string>>({});
   const [editingQa, setEditingQa] = useState<number | null>(null);

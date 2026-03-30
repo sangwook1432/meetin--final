@@ -39,6 +39,11 @@ export default function UserProfilePage() {
   const [selected, setSelected] = useState<{ photo_url: string; caption: string | null } | null>(null);
 
   useEffect(() => {
+    document.body.style.overflow = selected ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [selected]);
+
+  useEffect(() => {
     getUserProfile(userId)
       .then(setProfile)
       .catch((e) => setError(e instanceof Error ? e.message : "프로필을 불러올 수 없습니다"))
