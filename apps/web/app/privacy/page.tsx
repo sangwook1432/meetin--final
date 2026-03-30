@@ -20,6 +20,11 @@ export default function PrivacyPage() {
             처리 방법을 안내합니다.
           </p>
 
+          <div className="rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
+            본 서비스는 <strong>만 18세 이상의 성인만 이용</strong>할 수 있으며, 운영자는 미성년자의 개인정보를 의도적으로 수집하지 않습니다.
+            미성년자가 서비스를 이용하고 있음을 인지한 경우, 해당 계정 및 개인정보는 즉시 삭제 처리됩니다.
+          </div>
+
           <div>
             <h2 className="mb-3 text-base font-bold text-gray-900">제1조 (수집하는 개인정보 항목)</h2>
             <div className="space-y-4">
@@ -37,7 +42,7 @@ export default function PrivacyPage() {
                 <ul className="list-disc pl-5 space-y-1 text-gray-600">
                   <li>닉네임, 성별, 나이</li>
                   <li>대학교, 학과, 학번(입학연도)</li>
-                  <li>선호 지역 (선택)</li>
+                  <li>선호 지역 (선택) — GPS 등 실시간 위치정보는 수집하지 않으며, 이용자가 직접 입력한 값만 프로필 정보로 활용됩니다.</li>
                   <li>자기소개 (선택)</li>
                   <li>닮은꼴 정보 (선택)</li>
                   <li>10문10답 답변 (선택)</li>
@@ -61,14 +66,14 @@ export default function PrivacyPage() {
                 <p className="font-semibold text-gray-800 mb-1">⑤ 애프터 신청 시</p>
                 <ul className="list-disc pl-5 space-y-1 text-gray-600">
                   <li>애프터 신청 메시지</li>
-                  <li>신청인의 휴대폰 번호 — 수신인에게 복호화된 형태로 제공됩니다. 애프터 신청 기능 이용 시 이에 동의한 것으로 간주합니다.</li>
+                  <li>신청인의 휴대폰 번호 — 수신인에게 복호화된 형태로 제공됩니다. 이용자는 애프터 신청 기능 이용 시 이에 명시적으로 동의합니다.</li>
                 </ul>
               </div>
               <div>
                 <p className="font-semibold text-gray-800 mb-1">⑥ 서비스 이용 과정에서 자동 수집</p>
                 <ul className="list-disc pl-5 space-y-1 text-gray-600">
                   <li>서비스 이용 기록, 접속 로그</li>
-                  <li>채팅 메시지 내용</li>
+                  <li>채팅 메시지 내용 — 서비스 제공 및 분쟁 대응을 위해 보관되며, 회원 탈퇴 시 또는 수집 목적 달성 후 지체 없이 삭제됩니다. 단, 관계 법령에 따라 보관이 필요한 경우 해당 기간 동안 보관될 수 있습니다.</li>
                   <li>미팅 참여 및 평가 내역</li>
                   <li>신고 내역</li>
                 </ul>
@@ -137,8 +142,8 @@ export default function PrivacyPage() {
                   <li>법령에 의거하거나 수사기관의 적법한 요청이 있는 경우</li>
                 </ul>
               </li>
-              <li>③ 미팅 매칭이 성사된 경우, 상대방 팀에게 프로필 정보(닉네임, 대학교, 사진 등)가 공개됩니다. 이는 서비스의 본질적 기능으로, 가입 시 동의한 것으로 간주됩니다.</li>
-              <li>④ 애프터 신청 기능을 이용하는 경우, 신청인의 휴대폰 번호가 수신인에게 제공됩니다. 신청 버튼을 누르는 시점에 이에 동의한 것으로 간주합니다.</li>
+              <li>③ 미팅 매칭이 성사된 경우, 상대방 팀에게 프로필 정보(닉네임, 대학교, 사진 등)가 공개됩니다. 이는 서비스의 본질적 기능으로, 가입 시 본 방침에 따라 이에 동의합니다.</li>
+              <li>④ 애프터 신청 기능을 이용하는 경우, 신청인의 휴대폰 번호가 수신인에게 제공됩니다. 이용자는 애프터 신청 버튼을 누르는 시점에 이에 명시적으로 동의합니다.</li>
             </ul>
           </div>
 
@@ -168,6 +173,40 @@ export default function PrivacyPage() {
                   <tr>
                     <td className="border border-gray-200 px-3 py-2">Sentry (Functional Software, Inc.)</td>
                     <td className="border border-gray-200 px-3 py-2">서버 오류 모니터링</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div>
+            <h2 className="mb-3 text-base font-bold text-gray-900">제5조의2 (개인정보의 국외 이전)</h2>
+            <p className="mb-3 text-gray-600">이용자의 개인정보는 서비스 제공을 위해 국외에 위치한 서버에 저장 및 처리될 수 있습니다.</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs border-collapse border border-gray-200">
+                <thead>
+                  <tr className="bg-gray-50">
+                    <th className="border border-gray-200 px-3 py-2 text-left font-semibold">이전 업체</th>
+                    <th className="border border-gray-200 px-3 py-2 text-left font-semibold">이전 국가</th>
+                    <th className="border border-gray-200 px-3 py-2 text-left font-semibold">이전 항목</th>
+                    <th className="border border-gray-200 px-3 py-2 text-left font-semibold">이전 목적</th>
+                    <th className="border border-gray-200 px-3 py-2 text-left font-semibold">보유 기간</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="border border-gray-200 px-3 py-2">Cloudflare, Inc.</td>
+                    <td className="border border-gray-200 px-3 py-2">미국</td>
+                    <td className="border border-gray-200 px-3 py-2">이미지 파일</td>
+                    <td className="border border-gray-200 px-3 py-2">데이터 저장 및 서비스 운영</td>
+                    <td className="border border-gray-200 px-3 py-2">회원 탈퇴 시까지</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-gray-200 px-3 py-2">Sentry (Functional Software, Inc.)</td>
+                    <td className="border border-gray-200 px-3 py-2">미국</td>
+                    <td className="border border-gray-200 px-3 py-2">서비스 이용 로그</td>
+                    <td className="border border-gray-200 px-3 py-2">오류 모니터링</td>
+                    <td className="border border-gray-200 px-3 py-2">위탁 계약 종료 시까지</td>
                   </tr>
                 </tbody>
               </table>
