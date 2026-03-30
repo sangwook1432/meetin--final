@@ -350,7 +350,7 @@ export default function WalletPage() {
           )}
         </div>
 
-        {/* 서비스 상세 설명 */}
+        {/* 서비스 상세 설명 + 사업자 정보 */}
         <div className="rounded-2xl border border-gray-100 bg-white px-4 py-4 text-xs text-gray-500 space-y-1.5">
           <p className="font-semibold text-gray-700 mb-2">서비스 상세 설명</p>
           <p>MEETIN.은 대학생 미팅 주선 디지털 서비스입니다.</p>
@@ -358,17 +358,16 @@ export default function WalletPage() {
           <p>· <span className="font-medium text-gray-700">매칭권</span>: 미팅 참가 신청에 필요한 디지털 이용권 (잔액으로 구매)</p>
           <p>· 결제 후 미팅 매칭이 확정된 시점부터 서비스가 제공됩니다.</p>
           <p>· 미사용 잔액은 환불 정책에 따라 출금 신청이 가능합니다.</p>
-        </div>
 
-        {/* 사업자 정보 (결제 페이지 필수 노출) */}
-        <div className="rounded-2xl border border-gray-100 bg-white px-4 py-4 text-xs text-gray-400 space-y-0.5">
-          <p className="font-semibold text-gray-500 mb-1.5">사업자 정보</p>
-          <p>상호명: MEETIN. · 대표자: 전상욱</p>
-          <p>사업자등록번호: 420-05-03754 (간이과세자)</p>
-          <p>사업장주소: 경기도 고양시 일산서구 대산로 106, 109동 1401호 (주엽동, 강선마을)</p>
-          <p>통신판매업신고번호: 신고 진행 중</p>
-          <p>유선번호: 010-4544-7834</p>
-          <p>이메일: adamjeon2003@gmail.com</p>
+          <div className="my-2 border-t border-gray-100" />
+
+          <p className="font-semibold text-gray-700 mb-1.5">사업자 정보</p>
+          <p className="text-gray-400">상호명: MEETIN. · 대표자: 전상욱</p>
+          <p className="text-gray-400">사업자등록번호: 420-05-03754 (간이과세자)</p>
+          <p className="text-gray-400">사업장주소: 경기도 고양시 일산서구 대산로 106, 109동 1401호 (주엽동, 강선마을)</p>
+          <p className="text-gray-400">통신판매업신고번호: 신고 진행 중</p>
+          <p className="text-gray-400">유선번호: 010-4544-7834</p>
+          <p className="text-gray-400">이메일: adamjeon2003@gmail.com</p>
         </div>
       </div>
 
