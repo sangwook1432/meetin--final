@@ -350,6 +350,16 @@ export default function WalletPage() {
           )}
         </div>
 
+        {/* 서비스 상세 설명 */}
+        <div className="rounded-2xl border border-gray-100 bg-white px-4 py-4 text-xs text-gray-500 space-y-1.5">
+          <p className="font-semibold text-gray-700 mb-2">서비스 상세 설명</p>
+          <p>MEETIN.은 대학생 미팅 주선 디지털 서비스입니다.</p>
+          <p>· <span className="font-medium text-gray-700">잔액 충전</span>: 앱 내 전자지갑에 충전하는 선불 충전금 (1,000원 단위, 최대 500,000원)</p>
+          <p>· <span className="font-medium text-gray-700">매칭권</span>: 미팅 참가 신청에 필요한 디지털 이용권 (잔액으로 구매)</p>
+          <p>· 결제 후 미팅 매칭이 확정된 시점부터 서비스가 제공됩니다.</p>
+          <p>· 미사용 잔액은 환불 정책에 따라 출금 신청이 가능합니다.</p>
+        </div>
+
         {/* 사업자 정보 (결제 페이지 필수 노출) */}
         <div className="rounded-2xl border border-gray-100 bg-white px-4 py-4 text-xs text-gray-400 space-y-0.5">
           <p className="font-semibold text-gray-500 mb-1.5">사업자 정보</p>
