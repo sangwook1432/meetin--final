@@ -46,7 +46,11 @@ export default function BizInfoPage() {
           </div>
         </div>
 
-        <div className="mt-4 flex gap-3">
+        <p className="mt-4 text-xs leading-relaxed text-gray-400">
+          본 서비스는 통신판매중개자로서 통신판매의 당사자가 아니며, 서비스 내 거래의 책임은 각 이용자에게 있습니다.
+        </p>
+
+        <div className="mt-3 flex gap-3">
           <Link
             href="/terms"
             className="flex-1 rounded-xl border border-gray-200 py-3 text-center text-sm font-semibold text-gray-700 hover:bg-gray-50 active:bg-gray-100"
