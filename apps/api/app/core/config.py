@@ -32,20 +32,16 @@ class Settings(BaseSettings):
         alias="ALLOWED_ORIGINS",
     )
 
-    # ─── Toss Payments ───────────────────────────────────────────
-    # 테스트 키: https://developers.tosspayments.com/
-    toss_secret_key: str = Field(default="", alias="TOSS_SECRET_KEY")
-    toss_client_key: str = Field(default="", alias="TOSS_CLIENT_KEY")
+    # ─── 포트원 (PortOne v1) ──────────────────────────────────────
+    # 포트원 콘솔 → 결제 연동 → 식별코드·API Keys
+    imp_rest_api_key: str = Field(default="", alias="IMP_REST_API_KEY")
+    imp_rest_api_secret: str = Field(default="", alias="IMP_REST_API_SECRET")
+    # KG이니시스 MID (테스트: INIpayTest, 실서비스: 발급받은 MID)
+    imp_mid: str = Field(default="INIpayTest", alias="IMP_MID")
 
     # ─── 카카오 알림톡 ────────────────────────────────────────────
     kakao_api_key: str = Field(default="", alias="KAKAO_API_KEY")
     kakao_sender_key: str = Field(default="", alias="KAKAO_SENDER_KEY")
-
-    # ─── PASS 휴대폰 본인인증 (Solapi SMS) ──────────────────────────
-    # https://developers.solapi.com → API 키 발급 후 아래 3개만 입력
-    pass_api_key: str = Field(default="", alias="PASS_API_KEY")
-    pass_api_secret: str = Field(default="", alias="PASS_API_SECRET")
-    pass_sender_number: str = Field(default="", alias="PASS_SENDER_NUMBER")
 
     # ─── Redis ───────────────────────────────────────────────────
     # 없으면 WebSocket 인메모리 모드, 스케줄러 단일 실행 모드로 fallback

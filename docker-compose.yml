@@ -68,7 +68,7 @@ services:
       context: ./apps/web
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.meetinapp.com}
-        NEXT_PUBLIC_TOSS_CLIENT_KEY: ${NEXT_PUBLIC_TOSS_CLIENT_KEY:-}
+        NEXT_PUBLIC_IMP_CODE: ${NEXT_PUBLIC_IMP_CODE:-}
     restart: unless-stopped
     depends_on:
       - api

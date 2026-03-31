@@ -2,17 +2,9 @@ import re
 from pydantic import BaseModel, Field, field_validator
 
 
-class PhoneSendRequest(BaseModel):
-    phone: str
-
-
-class PhoneVerifyRequest(BaseModel):
-    phone: str
-    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
-    # KG이니시스 계약 전 mock용 — 인증 성공 시 토큰에 함께 저장
-    mock_name: str | None = None
-    mock_birth_date: str | None = None   # YYYYMMDD
-    mock_gender: str | None = None       # "M" | "F"
+class PhoneCertifyRequest(BaseModel):
+    """포트원 본인인증 완료 후 imp_uid 전달 → phone_token 발급"""
+    imp_uid: str
 
 
 class PhoneTokenInfoResponse(BaseModel):
@@ -30,7 +22,7 @@ class PhoneVerifyResponse(BaseModel):
 class RegisterRequest(BaseModel):
     username: str = Field(min_length=3, max_length=50)
     password: str = Field(min_length=8, max_length=72)
-    phone_token: str  # POST /auth/phone/verify 후 발급된 토큰
+    phone_token: str  # POST /auth/phone/certify 후 발급된 토큰
 
     @field_validator("username")
     @classmethod

@@ -1,26 +1,21 @@
 """
-PASS 휴대폰 본인인증 서비스 (SMS OTP)
+포트원(PortOne v1) 휴대폰 본인인증 서비스
 
-Solapi REST API 사용:
-  https://developers.solapi.com/references/messages-v4
+흐름:
+  1. 프론트에서 IMP.certification() 호출 → imp_uid 수신
+  2. 백엔드로 imp_uid 전달
+  3. 백엔드가 포트원 REST API로 imp_uid 검증
+  4. 검증 성공 시 phone_token 발급 (10분 유효, 1회용)
 
-PASS_API_KEY / PASS_API_SECRET 미설정 시 mock 모드 (콘솔 OTP 출력).
-
-phone_token 내부 구조 (JSON):
-  {"phone": "+821012345678", "name": "홍길동", "birth_date": "19990101", "gender": "M"}
-  KG이니시스 계약 전: mock_name / mock_birth_date / mock_gender 를 verify_otp에 전달
-  KG이니시스 계약 후: inicis 콜백에서 직접 토큰 발급 예정
+IMP_REST_API_KEY / IMP_REST_API_SECRET 미설정 시 mock 모드:
+  imp_uid 검증을 건너뛰고 imp_uid를 전화번호로 사용하는 테스트 토큰 발급
 """
 from __future__ import annotations
 
-import hashlib
-import hmac as _hmac
 import json
 import logging
-import re
 import secrets
 import time
-from datetime import datetime, timezone
 
 import httpx
 
@@ -28,14 +23,12 @@ from app.core.config import settings
 
 logger = logging.getLogger("meetin.pass_auth")
 
-SOLAPI_URL = "https://api.solapi.com/messages/v4/send"
+TOKEN_TTL = 600  # phone_token 유효 시간: 10분
 
-OTP_TTL = 300        # OTP 유효 시간: 5분
-TOKEN_TTL = 600      # phone_token 유효 시간: 10분
-SEND_LIMIT = 5       # 번호당 최대 발송 횟수 (SEND_WINDOW 내)
-SEND_WINDOW = 3600   # 발송 횟수 집계 윈도우: 1시간
-ATTEMPT_LIMIT = 5    # 번호당 최대 인증 시도 횟수 (ATTEMPT_WINDOW 내)
-ATTEMPT_WINDOW = 600 # 시도 횟수 집계 윈도우: 10분
+PORTONE_TOKEN_URL       = "https://api.iamport.kr/users/getToken"
+PORTONE_CERT_URL        = "https://api.iamport.kr/certifications/{imp_uid}"
+PORTONE_TOKEN_CACHE_KEY = "portone:access_token"
+PORTONE_TOKEN_TTL       = 25 * 60  # 25분 (30분 만료 5분 전 갱신)
 
 
 # ── 인메모리 fallback (Redis 없는 개발 환경) ────────────────────────
@@ -88,133 +81,126 @@ async def _delete(key: str) -> None:
         _mem_del(key)
 
 
-async def _increment(key: str, ttl: int) -> int:
-    """카운터 1 증가 후 현재값 반환. 첫 증가 시 TTL 설정."""
-    from app.core.redis import get_redis
-    r = get_redis()
-    if r:
-        val = await r.incr(key)
-        if val == 1:
-            await r.expire(key, ttl)
-        return val
-    # 인메모리 fallback
-    item = _mem.get(key)
-    if item:
-        count_str, expire_at = item
-        if time.monotonic() < expire_at:
-            new_count = int(count_str) + 1
-            _mem[key] = (str(new_count), expire_at)
-            return new_count
-    _mem[key] = ("1", time.monotonic() + ttl)
-    return 1
+# ── 포트원 액세스 토큰 발급 (캐싱) ─────────────────────────────────
+async def _get_portone_token() -> str:
+    """포트원 access_token 반환. Redis(또는 인메모리)에 25분 캐싱.
+
+    포트원 스펙:
+      - 만료 전 재요청 시 기존 토큰 반환 (만료 1분 전이면 5분 연장)
+      - 25분 TTL로 캐싱하면 30분 만료 전에 항상 갱신됨
+    """
+    cached = await _fetch(PORTONE_TOKEN_CACHE_KEY)
+    if cached:
+        return cached
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.post(
+            PORTONE_TOKEN_URL,
+            json={
+                "imp_key": settings.imp_rest_api_key,
+                "imp_secret": settings.imp_rest_api_secret,
+            },
+        )
+    if resp.status_code != 200:
+        raise RuntimeError(f"포트원 토큰 발급 실패: {resp.status_code} {resp.text}")
+    data = resp.json()
+    if data.get("code") != 0:
+        raise RuntimeError(f"포트원 토큰 오류: {data.get('message')}")
+
+    access_token: str = data["response"]["access_token"]
+    await _store(PORTONE_TOKEN_CACHE_KEY, access_token, PORTONE_TOKEN_TTL)
+    return access_token
 
 
-# ── Solapi 인증 헤더 ────────────────────────────────────────────────
-def _solapi_auth_header() -> str:
-    date = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    salt = secrets.token_hex(16)
-    data = f"date={date}&salt={salt}"
-    sig = _hmac.new(
-        settings.pass_api_secret.encode(),
-        data.encode(),
-        hashlib.sha256,
-    ).hexdigest()
-    return (
-        f"HMAC-SHA256 apiKey={settings.pass_api_key}, "
-        f"date={date}, salt={salt}, signature={sig}"
-    )
-
-
-async def _send_sms(phone_e164: str, otp: str) -> bool:
-    kr_phone = re.sub(r"^\+82", "0", phone_e164)
-    payload = {
-        "message": {
-            "to": kr_phone,
-            "from": settings.pass_sender_number,
-            "text": f"[MEETIN] 인증번호: {otp} (5분 이내 입력)",
-        }
-    }
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(
-                SOLAPI_URL,
-                json=payload,
-                headers={"Authorization": _solapi_auth_header()},
-            )
-        if resp.status_code == 200:
-            return True
-        logger.error("[PASS] SMS 발송 실패: %s %s", resp.status_code, resp.text)
-        return False
-    except Exception as exc:
-        logger.error("[PASS] SMS 발송 오류: %s", exc)
-        return False
+# ── 포트원 본인인증 조회 ─────────────────────────────────────────────
+async def _get_certification(imp_uid: str, access_token: str) -> dict:
+    url = PORTONE_CERT_URL.format(imp_uid=imp_uid)
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.get(
+            url,
+            headers={"Authorization": access_token},
+        )
+    if resp.status_code != 200:
+        raise RuntimeError(f"본인인증 조회 실패: {resp.status_code} {resp.text}")
+    data = resp.json()
+    if data.get("code") != 0:
+        raise RuntimeError(f"본인인증 오류: {data.get('message')}")
+    return data["response"]
 
 
 # ── 공개 API ────────────────────────────────────────────────────────
-async def send_otp(phone_e164: str) -> bool:
-    """OTP 생성 후 SMS 발송. PASS_API_KEY 미설정 시 mock 모드.
+async def certify(imp_uid: str) -> str | None:
+    """
+    포트원 imp_uid 검증 후 phone_token 발급.
 
     Returns:
-        True  — 발송 성공
-        False — SMS 발송 실패 (API 오류)
-        None  — 발송 횟수 초과 (호출자에서 429 반환 권장)
+        phone_token (str) — 성공
+        None               — 실패 (이미 사용된 imp_uid, 인증 만료 등)
+
+    mock 모드 (IMP_REST_API_KEY 미설정):
+        imp_uid를 phone로 사용하는 테스트 토큰 발급
     """
-    # 번호당 발송 횟수 제한
-    count = await _increment(f"otp_send:{phone_e164}", SEND_WINDOW)
-    if count > SEND_LIMIT:
-        logger.warning("[PASS] 발송 횟수 초과: ****%s (%d회)", phone_e164[-4:], count)
-        return None  # type: ignore[return-value]
-
-    # 암호학적으로 안전한 6자리 OTP 생성
-    otp = "".join(str(secrets.randbelow(10)) for _ in range(6))
-    await _store(f"otp:{phone_e164}", otp, OTP_TTL)
-
-    if not settings.pass_api_key:
-        logger.warning(
-            "[PASS MOCK] phone=****%s OTP=%s (5분 유효)",
-            phone_e164[-4:],
-            otp,
+    if not settings.imp_rest_api_key:
+        # mock 모드: imp_uid를 전화번호처럼 취급
+        logger.warning("[PASS MOCK] imp_uid=%s → phone_token 발급 (검증 없음)", imp_uid)
+        data = {
+            "phone": imp_uid,
+            "name": "테스트",
+            "birth_date": "19990101",
+            "gender": "M",
+        }
+        token = secrets.token_urlsafe(32)
+        await _store(
+            f"phone_token:{token}",
+            json.dumps(data, ensure_ascii=False),
+            TOKEN_TTL,
         )
-        return True
+        return token
 
-    return await _send_sms(phone_e164, otp)
-
-
-async def verify_otp(
-    phone_e164: str,
-    code: str,
-    extra: dict | None = None,
-) -> str | None:
-    """OTP 검증. 성공 시 1회용 phone_token 반환, 실패/잠금 시 None.
-
-    extra: KG이니시스 mock 데이터 {"name": ..., "birth_date": ..., "gender": ...}
-    """
-    attempts_key = f"otp_attempts:{phone_e164}"
-
-    # 시도 횟수 초과 시 즉시 거부
-    current = await _fetch(attempts_key)
-    if current is not None and int(current) >= ATTEMPT_LIMIT:
-        logger.warning("[PASS] 시도 횟수 초과: ****%s", phone_e164[-4:])
+    try:
+        access_token = await _get_portone_token()
+        cert = await _get_certification(imp_uid, access_token)
+    except RuntimeError as exc:
+        logger.error("[PASS] 포트원 검증 오류: %s", exc)
         return None
 
-    # 시도 횟수 증가
-    await _increment(attempts_key, ATTEMPT_WINDOW)
-
-    stored = await _fetch(f"otp:{phone_e164}")
-    # timing attack 방지: compare_digest 사용
-    if not stored or not _hmac.compare_digest(stored, code):
+    # 이미 사용된 imp_uid 재사용 방지
+    used_key = f"cert_used:{imp_uid}"
+    if await _fetch(used_key):
+        logger.warning("[PASS] 이미 사용된 imp_uid: %s", imp_uid)
         return None
+    await _store(used_key, "1", TOKEN_TTL)
 
-    # 성공: OTP·시도 횟수 삭제, phone_token 발급
-    await _delete(f"otp:{phone_e164}")
-    await _delete(attempts_key)
+    # 포트원 응답에서 본인인증 데이터 추출
+    # phone: E.164 또는 010-xxxx-xxxx 형식
+    raw_phone: str = cert.get("phone", "")
+    # 포트원은 01012345678 형식으로 내려줌 → E.164 변환
+    from app.services.phone import normalize_phone_kr_to_e164
+    try:
+        phone_e164 = normalize_phone_kr_to_e164(raw_phone)
+    except ValueError:
+        phone_e164 = raw_phone  # 변환 실패 시 원본 사용
 
-    data: dict = {"phone": phone_e164}
-    if extra:
-        data.update({k: v for k, v in extra.items() if v is not None})
+    birth: str = cert.get("birthday", "") or ""        # YYYY-MM-DD
+    birth_date = birth.replace("-", "") if birth else ""  # YYYYMMDD
+
+    gender_raw: str = cert.get("gender", "") or ""
+    gender = "M" if gender_raw == "male" else "F" if gender_raw == "female" else None
+
+    data = {
+        "phone": phone_e164,
+        "name": cert.get("name") or "",
+        "birth_date": birth_date,
+        "gender": gender,
+    }
 
     token = secrets.token_urlsafe(32)
-    await _store(f"phone_token:{token}", json.dumps(data, ensure_ascii=False), TOKEN_TTL)
+    await _store(
+        f"phone_token:{token}",
+        json.dumps(data, ensure_ascii=False),
+        TOKEN_TTL,
+    )
+    logger.info("[PASS] 본인인증 성공: ****%s", phone_e164[-4:] if len(phone_e164) >= 4 else "")
     return token
 
 
@@ -226,7 +212,6 @@ def _parse_token_data(raw: str) -> dict:
             return data
     except (json.JSONDecodeError, ValueError):
         pass
-    # 구 형식: 평문 E.164 문자열
     return {"phone": raw}
 
 

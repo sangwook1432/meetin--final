@@ -196,44 +196,18 @@ export async function resetPasswordByToken(
   return res.json();
 }
 
-/** POST /auth/phone/send — OTP 발송 */
-export async function sendPhoneOtp(phone: string): Promise<{ message: string }> {
-  const res = await fetch(`${BASE}/auth/phone/send`, {
+/** POST /auth/phone/certify — 포트원 imp_uid 검증 후 phone_token 발급 */
+export async function certifyPhone(imp_uid: string): Promise<{ phone_token: string }> {
+  const res = await fetch(`${BASE}/auth/phone/certify`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ phone }),
+    body: JSON.stringify({ imp_uid }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     const detail = body?.detail;
     if (typeof detail === "string") throw new Error(detail);
-    throw new Error("인증번호 발송에 실패했습니다.");
-  }
-  return res.json();
-}
-
-/** POST /auth/phone/verify — OTP 검증 후 phone_token 발급 */
-export async function verifyPhoneOtp(
-  phone: string,
-  code: string,
-  mock?: { name?: string; birth_date?: string; gender?: string },
-): Promise<{ phone_token: string }> {
-  const res = await fetch(`${BASE}/auth/phone/verify`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      phone,
-      code,
-      mock_name: mock?.name,
-      mock_birth_date: mock?.birth_date,
-      mock_gender: mock?.gender,
-    }),
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const detail = body?.detail;
-    if (typeof detail === "string") throw new Error(detail);
-    throw new Error("인증번호가 올바르지 않습니다.");
+    throw new Error("본인인증에 실패했습니다.");
   }
   return res.json();
 }
@@ -760,10 +734,10 @@ export async function prepareCharge(amount: number): Promise<{
   return apiFetch(`/wallet/charge/prepare?amount=${amount}`, { method: "POST" });
 }
 
-/** POST /wallet/charge/confirm — 충전 확정 */
+/** POST /wallet/charge/confirm — 포트원 결제 확정 */
 export async function confirmCharge(payload: {
-  order_id: string;
-  payment_key: string;
+  imp_uid: string;
+  merchant_uid: string;
   amount: number;
 }): Promise<{ status: string; balance: number }> {
   return apiFetch("/wallet/charge/confirm", {

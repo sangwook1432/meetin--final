@@ -20,8 +20,7 @@ from app.schemas.auth import (
     RegisterRequest,
     LoginRequest,
     TokenResponse,
-    PhoneSendRequest,
-    PhoneVerifyRequest,
+    PhoneCertifyRequest,
     PhoneVerifyResponse,
     PhoneTokenInfoResponse,
 )
@@ -78,48 +77,23 @@ class ResetPasswordRequest(BaseModel):
     new_password: str
 
 
-# ─── 휴대폰 인증 ─────────────────────────────────────────────────
+# ─── 포트원 휴대폰 본인인증 ──────────────────────────────────────
 
-@router.post("/phone/send")
-@_rate_limit("3/minute")
-async def phone_send(request: Request, payload: PhoneSendRequest):
-    """OTP 발송. PASS_API_KEY 미설정 시 서버 로그에 OTP 출력 (mock 모드)."""
-    try:
-        e164 = normalize_phone_kr_to_e164(payload.phone)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    result = await pass_auth.send_otp(e164)
-    if result is None:
-        raise HTTPException(status_code=429, detail="인증번호 발송 횟수를 초과했습니다. 1시간 후 다시 시도해주세요.")
-    if not result:
-        raise HTTPException(status_code=500, detail="SMS 발송에 실패했습니다. 잠시 후 다시 시도해주세요.")
-    return {"message": "인증번호가 발송되었습니다."}
-
-
-@router.post("/phone/verify", response_model=PhoneVerifyResponse)
-@_rate_limit("5/minute")
-async def phone_verify(request: Request, payload: PhoneVerifyRequest):
-    """OTP 검증 후 phone_token 발급 (10분 유효, 1회용).
-
-    mock_name / mock_birth_date / mock_gender 전달 시 토큰에 함께 저장 (KG이니시스 연동 전 테스트용).
+@router.post("/phone/certify", response_model=PhoneVerifyResponse)
+@_rate_limit("10/minute")
+async def phone_certify(request: Request, payload: PhoneCertifyRequest):
     """
-    try:
-        e164 = normalize_phone_kr_to_e164(payload.phone)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    포트원 본인인증 완료 후 imp_uid를 서버에서 검증하고 phone_token 발급.
 
-    extra: dict | None = None
-    if any([payload.mock_name, payload.mock_birth_date, payload.mock_gender]):
-        extra = {
-            "name": payload.mock_name,
-            "birth_date": payload.mock_birth_date,
-            "gender": payload.mock_gender,
-        }
-
-    token = await pass_auth.verify_otp(e164, payload.code, extra=extra)
+    프론트에서 IMP.certification() 성공 후 받은 imp_uid를 전달.
+    검증 성공 시 10분 유효 1회용 phone_token 반환.
+    """
+    token = await pass_auth.certify(payload.imp_uid)
     if not token:
-        raise HTTPException(status_code=400, detail="인증번호가 올바르지 않거나 만료되었습니다.")
+        raise HTTPException(
+            status_code=400,
+            detail="본인인증에 실패했습니다. 다시 시도해주세요.",
+        )
     return PhoneVerifyResponse(phone_token=token)
 
 
@@ -197,7 +171,7 @@ async def register(request: Request, response: Response, payload: RegisterReques
         phone_last4=phone_last4(e164),
         phone_e164=encrypt_phone(e164),
         phone_verified=True,
-        is_admin=False,  # 관리자는 DB에서 직접 지정
+        is_admin=False,
         real_name=verified_name,
         age=verified_age,
         gender=verified_gender,
@@ -275,7 +249,7 @@ def logout(response: Response):
 @router.post("/find-username")
 @_rate_limit("5/minute")
 async def find_username(request: Request, payload: FindEmailRequest, db: Session = Depends(get_db)):
-    """휴대폰 인증 후 가입 아이디 찾기."""
+    """휴대폰 본인인증 후 가입 아이디 찾기."""
     e164 = await pass_auth.consume_phone_token(payload.phone_token)
     if not e164:
         raise HTTPException(status_code=400, detail="휴대폰 인증이 필요합니다.")
@@ -296,7 +270,7 @@ async def find_username(request: Request, payload: FindEmailRequest, db: Session
 @router.post("/reset-password")
 @_rate_limit("5/minute")
 async def reset_password(request: Request, payload: ResetPasswordRequest, db: Session = Depends(get_db)):
-    """휴대폰 인증 후 비밀번호 재설정."""
+    """휴대폰 본인인증 후 비밀번호 재설정."""
     e164 = await pass_auth.consume_phone_token(payload.phone_token)
     if not e164:
         raise HTTPException(status_code=400, detail="휴대폰 인증이 필요합니다.")

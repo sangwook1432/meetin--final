@@ -10,7 +10,7 @@ import {
 } from "@/lib/api";
 import { AppShell } from "@/components/ui/AppShell";
 
-const TOSS_CLIENT_KEY = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY ?? "";
+const IMP_CODE = process.env.NEXT_PUBLIC_IMP_CODE ?? "";
 
 type TxType = "CHARGE" | "FORFEIT" | "WITHDRAW" | "WITHDRAW_DONE" | "ADMIN_ADJUST" | "TICKET_PURCHASE";
 
@@ -126,18 +126,24 @@ export default function WalletPage() {
 
   useEffect(() => { loadData(); }, []);
 
-  // Toss 결제 성공 리다이렉트 처리 (paymentKey, orderId, amount 쿼리 파라미터)
+  // 포트원 결제 리다이렉트 처리 (imp_uid, merchant_uid, imp_success 쿼리 파라미터)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const paymentKey = params.get("paymentKey");
-    const orderId = params.get("orderId");
+    const imp_uid = params.get("imp_uid");
+    const merchant_uid = params.get("merchant_uid");
+    const imp_success = params.get("imp_success");
     const amount = params.get("amount");
-    if (!paymentKey || !orderId || !amount) return;
+    if (!imp_uid || !merchant_uid) return;
 
-    console.log("🔍 Toss 리다이렉트 파라미터:", { paymentKey, orderId, amount });
     window.history.replaceState({}, "", "/me/wallet");
+
+    if (imp_success === "false") {
+      setError("결제가 취소되었습니다.");
+      return;
+    }
+
     setCharging(true);
-    confirmCharge({ order_id: orderId, payment_key: paymentKey, amount: Number(amount) })
+    confirmCharge({ imp_uid, merchant_uid, amount: Number(amount) })
       .then(async () => {
         await loadData();
         alert(`✅ ${Number(amount).toLocaleString()}원이 충전되었습니다!`);
@@ -153,22 +159,42 @@ export default function WalletPage() {
     try {
       const { orderId, orderName } = await prepareCharge(chargeAmount);
 
-      if (TOSS_CLIENT_KEY) {
-        // Toss 결제창 실행 — 성공 시 이 페이지로 리다이렉트되어 위의 useEffect가 처리
-        const tossPayments = (window as any).TossPayments(TOSS_CLIENT_KEY);
-        tossPayments.requestPayment("카드", {
-          amount: chargeAmount,
-          orderId,
-          orderName,
-          customerName: "MEETIN 회원",
-          successUrl: `${window.location.origin}/me/wallet`,
-          failUrl: `${window.location.origin}/me/wallet`,
-        });
-        return; // Toss가 페이지를 리다이렉트하므로 이후 코드 실행 안 됨
+      if (IMP_CODE) {
+        // 포트원 결제창 실행
+        const IMP = (window as any).IMP;
+        IMP.init(IMP_CODE);
+        IMP.request_pay(
+          {
+            pg: "html5_inicis",
+            pay_method: "card",
+            merchant_uid: orderId,
+            name: orderName,
+            amount: chargeAmount,
+            m_redirect_url: `${window.location.origin}/me/wallet?merchant_uid=${orderId}&amount=${chargeAmount}`,
+          },
+          async (rsp: any) => {
+            if (!rsp.success) {
+              setError(rsp.error_msg ?? "결제에 실패했습니다.");
+              setCharging(false);
+              return;
+            }
+            try {
+              await confirmCharge({ imp_uid: rsp.imp_uid, merchant_uid: rsp.merchant_uid, amount: chargeAmount });
+              await loadData();
+              setShowChargeModal(false);
+              alert(`✅ ${chargeAmount.toLocaleString()}원이 충전되었습니다!`);
+            } catch (e) {
+              setError(e instanceof Error ? e.message : "충전 확인 실패");
+            } finally {
+              setCharging(false);
+            }
+          },
+        );
+        return;
       }
 
-      // Mock 모드 (TOSS_CLIENT_KEY 없는 개발 환경)
-      await confirmCharge({ order_id: orderId, payment_key: "mock_key", amount: chargeAmount });
+      // Mock 모드 (IMP_CODE 없는 개발 환경)
+      await confirmCharge({ imp_uid: "mock_imp_uid", merchant_uid: orderId, amount: chargeAmount });
       await loadData();
       setShowChargeModal(false);
       alert(`✅ ${chargeAmount.toLocaleString()}원이 충전되었습니다! (테스트 모드)`);
@@ -236,8 +262,8 @@ export default function WalletPage() {
 
   return (
     <AppShell>
-      {TOSS_CLIENT_KEY && (
-        <Script src="https://js.tosspayments.com/v1/payment" strategy="afterInteractive" />
+      {IMP_CODE && (
+        <Script src="https://cdn.iamport.kr/v1/iamport.js" strategy="afterInteractive" />
       )}
       <div className="mx-auto max-w-md px-4 py-6 space-y-5">
 
@@ -408,7 +434,7 @@ export default function WalletPage() {
               {charging ? "처리 중..." : `${chargeAmount.toLocaleString()}원 충전하기`}
             </button>
             <p className="mt-3 text-center text-xs text-gray-400">
-              {TOSS_CLIENT_KEY ? "토스 결제창으로 이동합니다" : "개발 환경 — 실제 결제 없이 바로 충전됩니다"}
+              {IMP_CODE ? "KG이니시스 결제창으로 이동합니다" : "개발 환경 — 실제 결제 없이 바로 충전됩니다"}
             </p>
           </div>
         </div>

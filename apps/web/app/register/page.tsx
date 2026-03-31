@@ -2,10 +2,13 @@
 
 import { useState, FormEvent } from "react";
 import Link from "next/link";
+import Script from "next/script";
 import { useRouter } from "next/navigation";
-import { registerApi, sendPhoneOtp, verifyPhoneOtp, getPhoneTokenInfo } from "@/lib/api";
+import { registerApi, certifyPhone, getPhoneTokenInfo } from "@/lib/api";
 import { setTokens } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+
+const IMP_CODE = process.env.NEXT_PUBLIC_IMP_CODE ?? "";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -13,20 +16,12 @@ export default function RegisterPage() {
 
   const [form, setForm] = useState({
     username: "",
-    phone: "",
-    otpCode: "",
     password: "",
     passwordConfirm: "",
-    // KG이니시스 mock 입력 (계약 전 테스트용)
-    mockName: "",
-    mockBirthDate: "",   // YYYYMMDD
-    mockGender: "",      // "M" | "F"
   });
   const [phoneToken, setPhoneToken] = useState<string | null>(null);
-  const [otpSent, setOtpSent] = useState(false);
   const [phoneVerified, setPhoneVerified] = useState(false);
 
-  // 본인인증 완료 후 자동완성 데이터
   const [verifiedInfo, setVerifiedInfo] = useState<{
     name: string | null;
     age: number | null;
@@ -35,8 +30,7 @@ export default function RegisterPage() {
 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [otpLoading, setOtpLoading] = useState(false);
-  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [certLoading, setCertLoading] = useState(false);
 
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [agreedPrivacy, setAgreedPrivacy] = useState(false);
@@ -46,53 +40,44 @@ export default function RegisterPage() {
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  // 인증번호 발송
-  const handleSendOtp = async () => {
+  // 포트원 본인인증
+  const handleCertify = () => {
     setError(null);
-    if (!form.phone.trim()) {
-      setError("전화번호를 입력해주세요.");
+    const IMP = (window as any).IMP;
+    if (!IMP) {
+      setError("본인인증 모듈을 불러오는 중입니다. 잠시 후 다시 시도해주세요.");
       return;
     }
-    setOtpLoading(true);
-    try {
-      await sendPhoneOtp(form.phone.trim());
-      setOtpSent(true);
-      setPhoneVerified(false);
-      setPhoneToken(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "인증번호 발송 실패");
-    } finally {
-      setOtpLoading(false);
-    }
-  };
+    IMP.init(IMP_CODE || "imp_test");
+    setCertLoading(true);
+    IMP.certification(
+      {
+        pg: "inicis_unified",
+        merchant_uid: `cert_${Date.now()}`,
+        popup: false,
+      },
+      async (rsp: any) => {
+        if (!rsp.success) {
+          setError(rsp.error_msg ?? "본인인증에 실패했습니다.");
+          setCertLoading(false);
+          return;
+        }
+        try {
+          const { phone_token } = await certifyPhone(rsp.imp_uid);
+          setPhoneToken(phone_token);
+          setPhoneVerified(true);
 
-  // OTP 인증
-  const handleVerifyOtp = async () => {
-    setError(null);
-    if (!form.otpCode.trim()) {
-      setError("인증번호를 입력해주세요.");
-      return;
-    }
-    setVerifyLoading(true);
-    try {
-      const mock = (form.mockName || form.mockBirthDate || form.mockGender)
-        ? { name: form.mockName || undefined, birth_date: form.mockBirthDate || undefined, gender: form.mockGender || undefined }
-        : undefined;
-
-      const { phone_token } = await verifyPhoneOtp(form.phone.trim(), form.otpCode.trim(), mock);
-      setPhoneToken(phone_token);
-      setPhoneVerified(true);
-
-      // 인증 완료 후 자동완성 데이터 조회
-      const info = await getPhoneTokenInfo(phone_token);
-      if (info.name || info.age) {
-        setVerifiedInfo({ name: info.name, age: info.age, phone: info.phone });
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "인증 실패");
-    } finally {
-      setVerifyLoading(false);
-    }
+          const info = await getPhoneTokenInfo(phone_token);
+          if (info.name || info.age) {
+            setVerifiedInfo({ name: info.name, age: info.age, phone: info.phone });
+          }
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "본인인증 처리 실패");
+        } finally {
+          setCertLoading(false);
+        }
+      },
+    );
   };
 
   // 회원가입 제출
@@ -101,7 +86,7 @@ export default function RegisterPage() {
     setError(null);
 
     if (!phoneVerified || !phoneToken) {
-      setError("전화번호 인증을 완료해주세요.");
+      setError("본인인증을 완료해주세요.");
       return;
     }
     if (!agreedTerms || !agreedPrivacy) {
@@ -140,6 +125,7 @@ export default function RegisterPage() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-5 py-10">
+      <Script src="https://cdn.iamport.kr/v1/iamport.js" strategy="afterInteractive" />
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <h1 className="text-4xl font-black tracking-tight text-gray-900">
@@ -161,93 +147,20 @@ export default function RegisterPage() {
             />
           </Field>
 
-          {/* KG이니시스 mock 본인인증 입력 (계약 전 테스트용) */}
-          {!phoneVerified && (
-            <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-3 space-y-2">
-              <p className="text-xs font-semibold text-gray-500">본인인증 정보 (KG이니시스 mock)</p>
-              <input
-                type="text"
-                value={form.mockName}
-                onChange={set("mockName")}
-                placeholder="이름 (예: 홍길동)"
-                className={`${inputCls} text-xs py-2`}
-              />
-              <input
-                type="text"
-                value={form.mockBirthDate}
-                onChange={set("mockBirthDate")}
-                placeholder="생년월일 8자리 (예: 19990101)"
-                maxLength={8}
-                className={`${inputCls} text-xs py-2`}
-              />
-              <select
-                value={form.mockGender}
-                onChange={(e) => setForm((f) => ({ ...f, mockGender: e.target.value }))}
-                className={`${inputCls} text-xs py-2`}
-              >
-                <option value="">성별 선택</option>
-                <option value="M">남성</option>
-                <option value="F">여성</option>
-              </select>
-            </div>
-          )}
-
-          {/* 전화번호 + OTP 발송 */}
-          <Field label="전화번호">
-            <div className="flex gap-2">
-              <input
-                type="tel"
-                value={form.phone}
-                onChange={(e) => {
-                  set("phone")(e);
-                  setOtpSent(false);
-                  setPhoneVerified(false);
-                  setPhoneToken(null);
-                  setVerifiedInfo(null);
-                }}
-                placeholder="01000000000"
-                required
-                disabled={phoneVerified}
-                className={`${inputCls} flex-1 ${phoneVerified ? "bg-gray-50 text-gray-400" : ""}`}
-              />
+          {/* 본인인증 */}
+          {!phoneVerified ? (
+            <Field label="본인인증">
               <button
                 type="button"
-                onClick={handleSendOtp}
-                disabled={otpLoading || phoneVerified}
-                className="shrink-0 rounded-xl bg-gray-800 px-4 py-3 text-xs font-bold text-white hover:bg-gray-700 disabled:opacity-40 transition-all"
+                onClick={handleCertify}
+                disabled={certLoading}
+                className="w-full rounded-xl bg-gray-800 py-3 text-sm font-bold text-white hover:bg-gray-700 disabled:opacity-40 transition-all"
               >
-                {otpLoading ? "발송중" : otpSent ? "재발송" : "인증번호 발송"}
+                {certLoading ? "인증 진행 중..." : "휴대폰 본인인증"}
               </button>
-            </div>
-          </Field>
-
-          {/* OTP 입력 — 발송 후 표시 */}
-          {otpSent && !phoneVerified && (
-            <Field label="인증번호">
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={form.otpCode}
-                  onChange={set("otpCode")}
-                  placeholder="6자리 입력"
-                  maxLength={6}
-                  className={`${inputCls} flex-1`}
-                />
-                <button
-                  type="button"
-                  onClick={handleVerifyOtp}
-                  disabled={verifyLoading}
-                  className="shrink-0 rounded-xl bg-blue-600 px-4 py-3 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-40 transition-all"
-                >
-                  {verifyLoading ? "확인중" : "인증하기"}
-                </button>
-              </div>
+              <p className="mt-1.5 text-xs text-gray-400">KG이니시스 본인인증 창이 열립니다</p>
             </Field>
-          )}
-
-          {/* 인증 완료 + 자동완성 정보 */}
-          {phoneVerified && (
+          ) : (
             <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-3 space-y-1">
               <div className="flex items-center gap-2 text-sm text-emerald-700">
                 <span className="font-bold">✓</span> 본인인증 완료
@@ -264,7 +177,7 @@ export default function RegisterPage() {
                   </div>
                   <div className="rounded-lg bg-white border border-emerald-100 px-3 py-2 text-center">
                     <p className="text-xs text-gray-400">전화번호</p>
-                    <p className="text-sm font-semibold text-gray-900">{form.phone}</p>
+                    <p className="text-sm font-semibold text-gray-900">{verifiedInfo.phone ?? "—"}</p>
                   </div>
                 </div>
               )}

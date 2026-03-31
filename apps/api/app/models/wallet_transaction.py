@@ -42,8 +42,8 @@ class WalletTransaction(Base):
         index=True,
     )
 
-    toss_order_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
-    toss_payment_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    pg_order_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    pg_payment_uid: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
 

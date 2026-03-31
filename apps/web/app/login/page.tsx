@@ -2,9 +2,12 @@
 
 import { useState, useEffect, FormEvent } from "react";
 import Link from "next/link";
+import Script from "next/script";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { sendPhoneOtp, verifyPhoneOtp, findUsernameByToken, resetPasswordByToken } from "@/lib/api";
+import { certifyPhone, findUsernameByToken, resetPasswordByToken } from "@/lib/api";
+
+const IMP_CODE = process.env.NEXT_PUBLIC_IMP_CODE ?? "";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -38,6 +41,7 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-5">
+      <Script src="https://cdn.iamport.kr/v1/iamport.js" strategy="afterInteractive" />
       <div className="w-full max-w-sm">
         <div className="mb-10 text-center">
           <h1 className="text-4xl font-black tracking-tight text-gray-900">
@@ -122,73 +126,70 @@ export default function LoginPage() {
 const inputCls =
   "w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-base text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all";
 
-// ─── OTP 공통 훅 로직 (모달 내부에서 재사용) ────────────────
-function useOtpFlow() {
-  const [phone, setPhone] = useState("");
-  const [otpCode, setOtpCode] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
+// ─── 포트원 본인인증 공통 훅 ────────────────────────────────
+function useCertifyFlow() {
   const [phoneToken, setPhoneToken] = useState<string | null>(null);
-  const [otpLoading, setOtpLoading] = useState(false);
-  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [certLoading, setCertLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const sendOtp = async () => {
-    setError(null);
-    if (!phone.trim()) { setError("전화번호를 입력해주세요."); return; }
-    setOtpLoading(true);
-    try {
-      await sendPhoneOtp(phone.trim());
-      setOtpSent(true);
-      setPhoneToken(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "인증번호 발송 실패");
-    } finally {
-      setOtpLoading(false);
-    }
+  const certify = (): Promise<string | null> => {
+    return new Promise((resolve) => {
+      setError(null);
+      const IMP = (window as any).IMP;
+      if (!IMP) {
+        setError("본인인증 모듈을 불러오는 중입니다. 잠시 후 다시 시도해주세요.");
+        resolve(null);
+        return;
+      }
+      IMP.init(IMP_CODE || "imp_test");
+      setCertLoading(true);
+      IMP.certification(
+        {
+          pg: "inicis_unified",
+          merchant_uid: `cert_${Date.now()}`,
+          popup: false,
+        },
+        async (rsp: any) => {
+          if (!rsp.success) {
+            setError(rsp.error_msg ?? "본인인증에 실패했습니다.");
+            setCertLoading(false);
+            resolve(null);
+            return;
+          }
+          try {
+            const { phone_token } = await certifyPhone(rsp.imp_uid);
+            setPhoneToken(phone_token);
+            resolve(phone_token);
+          } catch (err) {
+            setError(err instanceof Error ? err.message : "본인인증 처리 실패");
+            resolve(null);
+          } finally {
+            setCertLoading(false);
+          }
+        },
+      );
+    });
   };
 
-  const verifyOtp = async (): Promise<string | null> => {
-    setError(null);
-    if (!otpCode.trim()) { setError("인증번호를 입력해주세요."); return null; }
-    setVerifyLoading(true);
-    try {
-      const { phone_token } = await verifyPhoneOtp(phone.trim(), otpCode.trim());
-      setPhoneToken(phone_token);
-      return phone_token;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "인증 실패");
-      return null;
-    } finally {
-      setVerifyLoading(false);
-    }
-  };
-
-  return {
-    phone, setPhone,
-    otpCode, setOtpCode,
-    otpSent, phoneToken,
-    otpLoading, verifyLoading,
-    error, setError,
-    sendOtp, verifyOtp,
-  };
+  return { phoneToken, certLoading, error, setError, certify };
 }
 
 // ─── 아이디 찾기 모달 ─────────────────────────────────────
 
 function FindIdModal({ onClose }: { onClose: () => void }) {
-  const otp = useOtpFlow();
+  const cert = useCertifyFlow();
   const [result, setResult] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const handleVerifyAndFind = async () => {
-    const token = await otp.verifyOtp();
+  const handleCertifyAndFind = async () => {
+    const token = await cert.certify();
     if (!token) return;
     setLoading(true);
     try {
       const res = await findUsernameByToken(token);
       setResult(res.masked_username ?? "가입된 계정을 찾을 수 없습니다.");
     } catch (err) {
-      otp.setError(err instanceof Error ? err.message : "오류가 발생했습니다.");
+      cert.setError(err instanceof Error ? err.message : "오류가 발생했습니다.");
     } finally {
       setLoading(false);
     }
@@ -198,59 +199,22 @@ function FindIdModal({ onClose }: { onClose: () => void }) {
     <ModalShell title="아이디 찾기" onClose={onClose}>
       {!result ? (
         <div className="space-y-4">
-          <p className="text-sm text-gray-500">가입 시 등록한 전화번호로 인증하면 아이디를 확인할 수 있습니다.</p>
+          <p className="text-sm text-gray-500">가입 시 등록한 전화번호로 본인인증하면 아이디를 확인할 수 있습니다.</p>
 
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-gray-700">전화번호</label>
-            <div className="flex gap-2">
-              <input
-                type="tel"
-                value={otp.phone}
-                onChange={(e) => otp.setPhone(e.target.value)}
-                placeholder="01000000000"
-                className={`${inputCls} flex-1`}
-              />
-              <button
-                type="button"
-                onClick={otp.sendOtp}
-                disabled={otp.otpLoading}
-                className="shrink-0 rounded-xl bg-gray-800 px-3 py-3 text-xs font-bold text-white hover:bg-gray-700 disabled:opacity-40 transition-all"
-              >
-                {otp.otpLoading ? "발송중" : otp.otpSent ? "재발송" : "인증번호 발송"}
-              </button>
-            </div>
-          </div>
-
-          {otp.otpSent && (
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">인증번호</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={otp.otpCode}
-                  onChange={(e) => otp.setOtpCode(e.target.value)}
-                  placeholder="6자리 입력"
-                  maxLength={6}
-                  className={`${inputCls} flex-1`}
-                />
-                <button
-                  type="button"
-                  onClick={handleVerifyAndFind}
-                  disabled={otp.verifyLoading || loading}
-                  className="shrink-0 rounded-xl bg-blue-600 px-3 py-3 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-40 transition-all"
-                >
-                  {otp.verifyLoading || loading ? "확인중" : "아이디 찾기"}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {otp.error && (
+          {cert.error && (
             <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">
-              {otp.error}
+              {cert.error}
             </div>
           )}
+
+          <button
+            type="button"
+            onClick={handleCertifyAndFind}
+            disabled={cert.certLoading || loading}
+            className="w-full rounded-xl bg-gray-800 py-3 text-sm font-bold text-white hover:bg-gray-700 disabled:opacity-40 transition-all"
+          >
+            {cert.certLoading || loading ? "처리 중..." : "휴대폰 본인인증으로 찾기"}
+          </button>
         </div>
       ) : (
         <div className="space-y-5">
@@ -273,7 +237,7 @@ function FindIdModal({ onClose }: { onClose: () => void }) {
 type ResetStep = "phone" | "newpw" | "done";
 
 function ResetPasswordModal({ onClose }: { onClose: () => void }) {
-  const otp = useOtpFlow();
+  const cert = useCertifyFlow();
   const [step, setStep] = useState<ResetStep>("phone");
   const [verifiedToken, setVerifiedToken] = useState<string | null>(null);
   const [newPw, setNewPw] = useState("");
@@ -282,7 +246,7 @@ function ResetPasswordModal({ onClose }: { onClose: () => void }) {
   const [loading, setLoading] = useState(false);
 
   const handleVerifyPhone = async () => {
-    const token = await otp.verifyOtp();
+    const token = await cert.certify();
     if (!token) return;
     setVerifiedToken(token);
     setStep("newpw");
@@ -319,7 +283,7 @@ function ResetPasswordModal({ onClose }: { onClose: () => void }) {
                 {i < ["phone", "newpw"].indexOf(step) ? "✓" : i + 1}
               </div>
               <span className={`text-xs ${step === s ? "font-semibold text-gray-800" : "text-gray-400"}`}>
-                {s === "phone" ? "전화번호 인증" : "새 비밀번호 설정"}
+                {s === "phone" ? "본인인증" : "새 비밀번호 설정"}
               </span>
               {i < 1 && <div className="h-px w-6 bg-gray-200" />}
             </div>
@@ -329,35 +293,22 @@ function ResetPasswordModal({ onClose }: { onClose: () => void }) {
 
       {step === "phone" && (
         <div className="space-y-4">
-          <p className="text-sm text-gray-500">가입 시 등록한 전화번호로 인증해주세요.</p>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-gray-700">전화번호</label>
-            <div className="flex gap-2">
-              <input type="tel" value={otp.phone} onChange={(e) => otp.setPhone(e.target.value)}
-                placeholder="01000000000" className={`${inputCls} flex-1`} />
-              <button type="button" onClick={otp.sendOtp} disabled={otp.otpLoading}
-                className="shrink-0 rounded-xl bg-gray-800 px-3 py-3 text-xs font-bold text-white hover:bg-gray-700 disabled:opacity-40 transition-all">
-                {otp.otpLoading ? "발송중" : otp.otpSent ? "재발송" : "인증번호 발송"}
-              </button>
-            </div>
-          </div>
-          {otp.otpSent && (
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">인증번호</label>
-              <div className="flex gap-2">
-                <input type="text" inputMode="numeric" value={otp.otpCode}
-                  onChange={(e) => otp.setOtpCode(e.target.value)} placeholder="6자리 입력" maxLength={6}
-                  className={`${inputCls} flex-1`} />
-                <button type="button" onClick={handleVerifyPhone} disabled={otp.verifyLoading}
-                  className="shrink-0 rounded-xl bg-blue-600 px-3 py-3 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-40 transition-all">
-                  {otp.verifyLoading ? "확인중" : "다음"}
-                </button>
-              </div>
+          <p className="text-sm text-gray-500">가입 시 등록한 전화번호로 본인인증해주세요.</p>
+
+          {cert.error && (
+            <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">
+              {cert.error}
             </div>
           )}
-          {otp.error && (
-            <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">{otp.error}</div>
-          )}
+
+          <button
+            type="button"
+            onClick={handleVerifyPhone}
+            disabled={cert.certLoading}
+            className="w-full rounded-xl bg-gray-800 py-3 text-sm font-bold text-white hover:bg-gray-700 disabled:opacity-40 transition-all"
+          >
+            {cert.certLoading ? "인증 진행 중..." : "휴대폰 본인인증"}
+          </button>
         </div>
       )}
 

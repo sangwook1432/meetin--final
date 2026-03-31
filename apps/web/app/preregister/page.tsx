@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Script from "next/script";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const IMP_CODE = process.env.NEXT_PUBLIC_IMP_CODE ?? "";
 
-type Step = "phone" | "otp" | "gender";
+type Step = "certify" | "gender";
 
-const STEPS: Step[] = ["phone", "otp", "gender"];
+const STEPS: Step[] = ["certify", "gender"];
 
 function getUrgencyLabel(count: number, max: number) {
   if (count >= max) return { text: "마감", cls: "text-red-500" };
@@ -17,12 +19,11 @@ function getUrgencyLabel(count: number, max: number) {
 }
 
 export default function PreregisterPage() {
-  const [step, setStep] = useState<Step>("phone");
-  const [phone, setPhone] = useState("");
-  const [otpCode, setOtpCode] = useState("");
+  const [step, setStep] = useState<Step>("certify");
   const [phoneToken, setPhoneToken] = useState("");
   const [gender, setGender] = useState<"MALE" | "FEMALE" | "">("");
   const [loading, setLoading] = useState(false);
+  const [certLoading, setCertLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ tickets: number; gender: "MALE" | "FEMALE" } | null>(null);
   const [stats, setStats] = useState<{ male: number; female: number; male_max: number; female_max: number } | null>(null);
@@ -34,59 +35,45 @@ export default function PreregisterPage() {
       .catch(() => {});
   }, []);
 
-  const parseError = (status: number, detail: unknown, messages: Partial<Record<number, string>>, fallback: string): string => {
-    if (messages[status]) return messages[status]!;
-    if (typeof detail === "string") return detail;
-    if (Array.isArray(detail)) return (detail as { msg: string }[]).map((d) => d.msg).join(", ");
-    return fallback;
-  };
-
-  const handleSendOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+  // 포트원 본인인증
+  const handleCertify = () => {
     setError(null);
-    try {
-      const res = await fetch(`${BASE}/auth/phone/send`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(parseError(res.status, data.detail, {
-        400: "올바른 휴대폰 번호를 입력해주세요. (예: 01012345678)",
-        429: "인증번호 발송 횟수를 초과했습니다. 1시간 후 다시 시도해주세요.",
-        500: "SMS 발송에 실패했습니다. 잠시 후 다시 시도해주세요.",
-      }, "발송에 실패했습니다."));
-      setStep("otp");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.");
-    } finally {
-      setLoading(false);
+    const IMP = (window as any).IMP;
+    if (!IMP) {
+      setError("본인인증 모듈을 불러오는 중입니다. 잠시 후 다시 시도해주세요.");
+      return;
     }
-  };
-
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`${BASE}/auth/phone/verify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, code: otpCode }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(parseError(res.status, data.detail, {
-        400: "인증번호가 올바르지 않거나 만료되었습니다. 다시 확인해주세요.",
-        429: "인증 시도 횟수를 초과했습니다. 10분 후 다시 시도해주세요.",
-      }, "인증에 실패했습니다."));
-      setPhoneToken(data.phone_token);
-      setStep("gender");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "네트워크 오류가 발생했습니다.");
-    } finally {
-      setLoading(false);
-    }
+    IMP.init(IMP_CODE || "imp_test");
+    setCertLoading(true);
+    IMP.certification(
+      {
+        pg: "inicis_unified",
+        merchant_uid: `cert_${Date.now()}`,
+        popup: false,
+      },
+      async (rsp: any) => {
+        if (!rsp.success) {
+          setError(rsp.error_msg ?? "본인인증에 실패했습니다.");
+          setCertLoading(false);
+          return;
+        }
+        try {
+          const res = await fetch(`${BASE}/auth/phone/certify`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ imp_uid: rsp.imp_uid }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.detail ?? "본인인증 처리 실패");
+          setPhoneToken(data.phone_token);
+          setStep("gender");
+        } catch (e) {
+          setError(e instanceof Error ? e.message : "본인인증 처리 실패");
+        } finally {
+          setCertLoading(false);
+        }
+      },
+    );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -103,14 +90,13 @@ export default function PreregisterPage() {
       const data = await res.json();
       if (!res.ok) {
         if (res.status === 400) {
-          setStep("phone");
-          setOtpCode("");
+          setStep("certify");
           setPhoneToken("");
           throw new Error("인증이 만료되었습니다. 처음부터 다시 시도해주세요.");
         }
-        throw new Error(parseError(res.status, data.detail, {
-          409: "이미 사전예약된 번호입니다. 앱 출시를 기다려주세요! 🎉",
-        }, "오류가 발생했습니다."));
+        const detail = data.detail;
+        if (res.status === 409) throw new Error("이미 사전예약된 번호입니다. 앱 출시를 기다려주세요! 🎉");
+        throw new Error(typeof detail === "string" ? detail : "오류가 발생했습니다.");
       }
       setDone({ tickets: data.welcome_tickets, gender: gender as "MALE" | "FEMALE" });
     } catch (e) {
@@ -149,6 +135,7 @@ export default function PreregisterPage() {
 
   return (
     <div className="min-h-screen bg-white px-4 pb-16">
+      <Script src="https://cdn.iamport.kr/v1/iamport.js" strategy="afterInteractive" />
       <div className="mx-auto w-full max-w-sm pt-12">
 
         {/* ── 1. 헤더 ────────────────────────────────────────────── */}
@@ -162,9 +149,8 @@ export default function PreregisterPage() {
           </div>
         </div>
 
-        {/* ── 4. 정원 현황 ─────────────────────────────────────────── */}
+        {/* ── 정원 현황 ─────────────────────────────────────────── */}
         <div className="mb-4 grid grid-cols-2 gap-3">
-          {/* 여자 */}
           <div className="rounded-2xl border border-pink-100 bg-pink-50 p-4 text-center">
             <p className="text-xl font-black text-pink-600">
               {stats ? stats.female : "—"}
@@ -176,14 +162,11 @@ export default function PreregisterPage() {
             )}
             {stats && (
               <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-pink-100">
-                <div
-                  className="h-1 rounded-full bg-pink-400 transition-all"
-                  style={{ width: `${Math.min((stats.female / stats.female_max) * 100, 100)}%` }}
-                />
+                <div className="h-1 rounded-full bg-pink-400 transition-all"
+                  style={{ width: `${Math.min((stats.female / stats.female_max) * 100, 100)}%` }} />
               </div>
             )}
           </div>
-          {/* 남자 */}
           <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-center">
             <p className="text-xl font-black text-blue-600">
               {stats ? stats.male : "—"}
@@ -195,16 +178,14 @@ export default function PreregisterPage() {
             )}
             {stats && (
               <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-blue-100">
-                <div
-                  className="h-1 rounded-full bg-blue-400 transition-all"
-                  style={{ width: `${Math.min((stats.male / stats.male_max) * 100, 100)}%` }}
-                />
+                <div className="h-1 rounded-full bg-blue-400 transition-all"
+                  style={{ width: `${Math.min((stats.male / stats.male_max) * 100, 100)}%` }} />
               </div>
             )}
           </div>
         </div>
 
-        {/* ── 5. 혜택 섹션 ─────────────────────────────────────────── */}
+        {/* ── 혜택 섹션 ─────────────────────────────────────────── */}
         <div className="mb-7 rounded-2xl border border-amber-100 bg-amber-50 px-5 py-4">
           <p className="mb-3 text-xs font-bold uppercase tracking-widest text-amber-600">🎁 사전예약 혜택</p>
           <div className="space-y-2.5">
@@ -223,8 +204,7 @@ export default function PreregisterPage() {
         {/* ── 스텝 인디케이터 ──────────────────────────────────────── */}
         <div className="mb-4 flex items-center justify-center gap-1.5">
           {STEPS.map((s, i) => (
-            <div
-              key={s}
+            <div key={s}
               className={`h-1.5 rounded-full transition-all duration-300 ${
                 step === s ? "w-6 bg-blue-600" : i < currentStepIdx ? "w-3 bg-blue-300" : "w-3 bg-gray-200"
               }`}
@@ -232,44 +212,37 @@ export default function PreregisterPage() {
           ))}
         </div>
 
-        {/* ── 1단계: 전화번호 ──────────────────────────────────────── */}
-        {step === "phone" && (
-          <form onSubmit={handleSendOtp} className="space-y-4 rounded-3xl border border-gray-100 bg-white p-6 shadow-[0_2px_24px_rgba(0,0,0,0.07)]">
+        {/* ── 1단계: 본인인증 ──────────────────────────────────────── */}
+        {step === "certify" && (
+          <div className="space-y-4 rounded-3xl border border-gray-100 bg-white p-6 shadow-[0_2px_24px_rgba(0,0,0,0.07)]">
             <div>
-              <p className="mb-1 text-base font-bold text-gray-900">휴대폰 번호 입력</p>
-              <p className="mb-4 text-xs text-gray-400">사전예약 신청을 위해 번호 인증이 필요해요</p>
-              <input
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="01012345678"
-                required
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 outline-none transition-all focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-50"
-              />
+              <p className="mb-1 text-base font-bold text-gray-900">휴대폰 본인인증</p>
+              <p className="mb-4 text-xs text-gray-400">사전예약 신청을 위해 본인인증이 필요해요</p>
             </div>
             {error && <p className="rounded-xl bg-red-50 px-4 py-2.5 text-xs text-red-500">{error}</p>}
             <button
-              type="submit"
-              disabled={loading || !phone}
+              type="button"
+              onClick={handleCertify}
+              disabled={certLoading}
               className="w-full rounded-xl bg-blue-600 py-4 text-sm font-bold text-white transition-all hover:bg-blue-700 active:scale-[0.98] disabled:opacity-40"
             >
-              {loading ? "발송 중..." : "사전예약 하고 먼저 매칭 받기"}
+              {certLoading ? "인증 진행 중..." : "사전예약 하고 먼저 매칭 받기"}
             </button>
             <div className="space-y-1.5 pt-1">
               <p className="flex items-center gap-2 text-xs text-gray-400">
                 <span className="text-green-500">✔</span>
-                인증번호 외 다른 용도로 사용되지 않습니다
+                인증 정보는 사전예약 외 다른 용도로 사용되지 않습니다
               </p>
               <p className="flex items-center gap-2 text-xs text-gray-400">
                 <span className="text-green-500">✔</span>
                 스팸 절대 없음
               </p>
             </div>
-          </form>
+          </div>
         )}
 
         {/* ── 신뢰 섹션 (1단계에서만 표시) ────────────────────────── */}
-        {step === "phone" && (
+        {step === "certify" && (
           <div className="mt-4 rounded-2xl border border-green-100 bg-green-50 px-5 py-4">
             <p className="mb-2.5 text-xs font-bold uppercase tracking-widest text-green-600">안전하게 참여하세요</p>
             <ul className="space-y-2">
@@ -287,42 +260,7 @@ export default function PreregisterPage() {
           </div>
         )}
 
-        {/* ── 2단계: OTP ───────────────────────────────────────────── */}
-        {step === "otp" && (
-          <form onSubmit={handleVerifyOtp} className="space-y-4 rounded-3xl border border-gray-100 bg-white p-6 shadow-[0_2px_24px_rgba(0,0,0,0.07)]">
-            <div>
-              <p className="mb-1 text-base font-bold text-gray-900">인증번호 입력</p>
-              <p className="mb-4 text-xs text-gray-400">{phone}로 발송된 6자리 번호를 입력해주세요</p>
-              <input
-                type="text"
-                inputMode="numeric"
-                maxLength={6}
-                value={otpCode}
-                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
-                placeholder="000000"
-                required
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-center text-2xl font-bold tracking-[0.4em] text-gray-900 outline-none transition-all focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-50"
-              />
-            </div>
-            {error && <p className="rounded-xl bg-red-50 px-4 py-2.5 text-xs text-red-500">{error}</p>}
-            <button
-              type="submit"
-              disabled={loading || otpCode.length !== 6}
-              className="w-full rounded-xl bg-blue-600 py-4 text-sm font-bold text-white transition-all hover:bg-blue-700 active:scale-[0.98] disabled:opacity-40"
-            >
-              {loading ? "확인 중..." : "인증 확인"}
-            </button>
-            <button
-              type="button"
-              onClick={() => { setStep("phone"); setOtpCode(""); setError(null); }}
-              className="w-full text-center text-xs text-gray-400 transition-colors hover:text-gray-600"
-            >
-              번호 다시 입력하기
-            </button>
-          </form>
-        )}
-
-        {/* ── 3단계: 성별 ──────────────────────────────────────────── */}
+        {/* ── 2단계: 성별 ──────────────────────────────────────────── */}
         {step === "gender" && (
           <form onSubmit={handleSubmit} className="space-y-4 rounded-3xl border border-gray-100 bg-white p-6 shadow-[0_2px_24px_rgba(0,0,0,0.07)]">
             <div>
@@ -362,16 +300,13 @@ export default function PreregisterPage() {
             >
               {loading ? "등록 중..." : "사전예약 신청하기"}
             </button>
-            <div className="space-y-1.5 pt-1">
-              <p className="flex items-center gap-2 text-xs text-gray-400">
-                <span className="text-green-500">✔</span>
-                인증번호 외 다른 용도로 사용되지 않습니다
-              </p>
-              <p className="flex items-center gap-2 text-xs text-gray-400">
-                <span className="text-green-500">✔</span>
-                스팸 절대 없음
-              </p>
-            </div>
+            <button
+              type="button"
+              onClick={() => { setStep("certify"); setPhoneToken(""); setError(null); }}
+              className="w-full text-center text-xs text-gray-400 transition-colors hover:text-gray-600"
+            >
+              처음부터 다시 하기
+            </button>
           </form>
         )}
 

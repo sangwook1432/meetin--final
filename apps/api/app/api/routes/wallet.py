@@ -10,7 +10,6 @@ wallet.py — 잔액 관리 + 결제 내역
 """
 import logging
 import uuid
-import base64
 from typing import Optional
 
 import functools
@@ -51,8 +50,8 @@ WITHDRAW_MIN_FEE  = 1_000   # 수수료 최솟값 1,000원
 # ─── Schemas ─────────────────────────────────────────────────────
 
 class ChargeIn(BaseModel):
-    order_id: str
-    payment_key: str
+    imp_uid: str      # 포트원 결제 고유번호
+    merchant_uid: str # 가맹점 주문번호 (prepareCharge에서 생성한 orderId)
     amount: int = Field(gt=0, le=500_000)
 
 
@@ -69,17 +68,16 @@ class WithdrawIn(BaseModel):
 # ─── Helpers ─────────────────────────────────────────────────────
 
 def _record_tx(
-    db: Session, 
-    user_id: int, 
-    tx_type: TxType, 
+    db: Session,
+    user_id: int,
+    tx_type: TxType,
     amount: int,
-    balance_after: int, 
-    note: str, 
+    balance_after: int,
+    note: str,
     meeting_id: int | None = None,
-    toss_order_id: str | None = None,
-    toss_payment_key: str | None = None
+    pg_order_id: str | None = None,
+    pg_payment_uid: str | None = None,
 ):
-    """DB 모델 구조에 맞게 기록 함수 업데이트 (description -> note, ref_meeting_id -> meeting_id)"""
     tx = WalletTransaction(
         user_id=user_id,
         tx_type=tx_type,
@@ -87,8 +85,8 @@ def _record_tx(
         balance_after=balance_after,
         note=note,
         meeting_id=meeting_id,
-        toss_order_id=toss_order_id,
-        toss_payment_key=toss_payment_key
+        pg_order_id=pg_order_id,
+        pg_payment_uid=pg_payment_uid,
     )
     db.add(tx)
 
@@ -155,72 +153,77 @@ def prepare_charge(
 
 @router.post("/wallet/charge/confirm")
 @_rate_limit("10/minute")
-def confirm_charge(
+async def confirm_charge(
     request: Request,
     payload: ChargeIn,
     db: Session = Depends(get_db),
     user=Depends(require_verified),
 ):
     """
-    Toss 결제 성공 후 서버에서 실제 잔액 증가.
-    중복 처리 방지: toss_order_id 로 기존 거래 확실하게 확인.
+    포트원 결제 성공 후 서버에서 imp_uid 검증 및 실제 잔액 증가.
+    중복 처리 방지: pg_order_id(merchant_uid)로 기존 거래 확인.
     """
-    # 💡 수정된 부분: 정확히 toss_order_id 컬럼으로 중복 결제 검사
     existing = db.execute(
         select(WalletTransaction).where(
             WalletTransaction.user_id == user.id,
-            WalletTransaction.toss_order_id == payload.order_id,
+            WalletTransaction.pg_order_id == payload.merchant_uid,
         )
     ).scalar_one_or_none()
-    
+
     if existing:
         return {"status": "already_charged", "balance": user.balance}
 
-    # Toss 실결제 검증 (운영 키 설정 시 항상 검증 — payment_key 유무와 무관)
-    if settings.toss_secret_key:
-        if not payload.payment_key:
-            raise HTTPException(400, "payment_key가 누락되었습니다.")
-        creds = base64.b64encode(f"{settings.toss_secret_key}:".encode()).decode()
-        import httpx
+    # 포트원 실결제 검증 (운영 키 설정 시 항상 검증)
+    if settings.imp_rest_api_key:
+        import httpx as _httpx
+        from app.services.pass_auth import _get_portone_token
         try:
-            logger.info("Toss confirm request: orderId=%s, amount=%s", payload.order_id, payload.amount)
-            resp = httpx.post(
-                "https://api.tosspayments.com/v1/payments/confirm",
-                headers={"Authorization": f"Basic {creds}", "Content-Type": "application/json"},
-                json={"orderId": payload.order_id, "paymentKey": payload.payment_key, "amount": payload.amount},
-                timeout=10.0,
-            )
-            if resp.status_code != 200:
-                logger.warning("Toss payment rejected: %s", resp.text)
-                data = resp.json()
-                raise HTTPException(400, data.get("message", "Toss 결제 실패"))
-            # Toss 응답의 실제 승인 금액이 요청 금액과 일치하는지 서버에서도 검증
-            toss_data = resp.json()
-            approved_amount = toss_data.get("totalAmount") or toss_data.get("amount")
-            if approved_amount is not None and approved_amount != payload.amount:
+            # 1) 액세스 토큰 (캐싱된 토큰 재사용)
+            access_token = await _get_portone_token()
+
+            # 2) 결제 내역 조회
+            async with _httpx.AsyncClient(timeout=10.0) as _client:
+                pay_resp = await _client.get(
+                    f"https://api.iamport.kr/payments/{payload.imp_uid}",
+                    headers={"Authorization": access_token},
+                )
+            if pay_resp.status_code != 200 or pay_resp.json().get("code") != 0:
+                raise HTTPException(400, "포트원 결제 조회 실패")
+
+            payment = pay_resp.json()["response"]
+
+            # 3) 결제 상태 및 금액 검증
+            if payment.get("status") != "paid":
+                raise HTTPException(400, f"결제 미완료 상태입니다: {payment.get('status')}")
+            if payment.get("merchant_uid") != payload.merchant_uid:
+                raise HTTPException(400, "주문번호가 일치하지 않습니다.")
+            if payment.get("amount") != payload.amount:
                 raise HTTPException(400, "결제 금액이 일치하지 않습니다.")
+
+            logger.info(
+                "포트원 결제 검증 성공: imp_uid=%s merchant_uid=%s amount=%s",
+                payload.imp_uid, payload.merchant_uid, payload.amount,
+            )
         except HTTPException:
             raise
         except Exception as e:
-            raise HTTPException(500, f"Toss API 오류: {e}")
+            raise HTTPException(500, f"포트원 API 오류: {e}")
 
     # 잔액 증가
     db_user = db.execute(
         select(User).where(User.id == user.id).with_for_update()
     ).scalar_one()
-    
+
     db_user.balance += payload.amount
-    
-    # 💡 수정된 부분: note, toss_order_id, toss_payment_key 파라미터 전달
     _record_tx(
-        db=db, 
-        user_id=db_user.id, 
-        tx_type=TxType.CHARGE, 
+        db=db,
+        user_id=db_user.id,
+        tx_type=TxType.CHARGE,
         amount=payload.amount,
-        balance_after=db_user.balance, 
-        note=f"잔액 충전",
-        toss_order_id=payload.order_id,
-        toss_payment_key=payload.payment_key
+        balance_after=db_user.balance,
+        note="잔액 충전",
+        pg_order_id=payload.merchant_uid,
+        pg_payment_uid=payload.imp_uid,
     )
     db.commit()
     return {"status": "charged", "balance": db_user.balance}
@@ -267,7 +270,7 @@ def wallet_transactions(
                 "balance_after": t.balance_after,
                 "note": t.note,
                 "meeting_id": t.meeting_id,
-                "toss_order_id": t.toss_order_id,
+                "pg_order_id": t.pg_order_id,
                 "created_at": t.created_at,
             }
             for t in txs
