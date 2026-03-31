@@ -11,6 +11,7 @@ import {
 import { AppShell } from "@/components/ui/AppShell";
 
 const IMP_CODE = process.env.NEXT_PUBLIC_IMP_CODE ?? "";
+const IMP_PAY_CHANNEL_KEY = process.env.NEXT_PUBLIC_IMP_PAY_CHANNEL_KEY ?? "";
 
 type TxType = "CHARGE" | "FORFEIT" | "WITHDRAW" | "WITHDRAW_DONE" | "ADMIN_ADJUST" | "TICKET_PURCHASE";
 
@@ -165,7 +166,7 @@ export default function WalletPage() {
         IMP.init(IMP_CODE);
         IMP.request_pay(
           {
-            pg: "html5_inicis",
+            channelKey: IMP_PAY_CHANNEL_KEY,
             pay_method: "card",
             merchant_uid: orderId,
             name: orderName,

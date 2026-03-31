@@ -5,6 +5,7 @@ import Script from "next/script";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const IMP_CODE = process.env.NEXT_PUBLIC_IMP_CODE ?? "";
+const IMP_CERT_CHANNEL_KEY = process.env.NEXT_PUBLIC_IMP_CERT_CHANNEL_KEY ?? "";
 
 type Step = "certify" | "gender";
 
@@ -47,7 +48,7 @@ export default function PreregisterPage() {
     setCertLoading(true);
     IMP.certification(
       {
-        pg: "inicis_unified",
+        channelKey: IMP_CERT_CHANNEL_KEY,
         merchant_uid: `cert_${Date.now()}`,
         popup: false,
       },

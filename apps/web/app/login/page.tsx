@@ -8,6 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import { certifyPhone, findUsernameByToken, resetPasswordByToken } from "@/lib/api";
 
 const IMP_CODE = process.env.NEXT_PUBLIC_IMP_CODE ?? "";
+const IMP_CERT_CHANNEL_KEY = process.env.NEXT_PUBLIC_IMP_CERT_CHANNEL_KEY ?? "";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -145,7 +146,7 @@ function useCertifyFlow() {
       setCertLoading(true);
       IMP.certification(
         {
-          pg: "inicis_unified",
+          channelKey: IMP_CERT_CHANNEL_KEY,
           merchant_uid: `cert_${Date.now()}`,
           popup: false,
         },

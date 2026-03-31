@@ -9,6 +9,7 @@ import { setTokens } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 
 const IMP_CODE = process.env.NEXT_PUBLIC_IMP_CODE ?? "";
+const IMP_CERT_CHANNEL_KEY = process.env.NEXT_PUBLIC_IMP_CERT_CHANNEL_KEY ?? "";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -52,7 +53,7 @@ export default function RegisterPage() {
     setCertLoading(true);
     IMP.certification(
       {
-        pg: "inicis_unified",
+        channelKey: IMP_CERT_CHANNEL_KEY,
         merchant_uid: `cert_${Date.now()}`,
         popup: false,
       },
