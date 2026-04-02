@@ -72,21 +72,84 @@ async def _delete(key: str) -> None:
         _mem_del(key)
 
 
+def _build_html(otp: str) -> str:
+    return f"""<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;">
+
+        <!-- 로고 -->
+        <tr><td align="center" style="padding-bottom:24px;">
+          <span style="font-size:22px;font-weight:900;color:#111827;letter-spacing:-0.5px;">
+            MEETIN<span style="color:#2563eb;">.</span>
+          </span>
+        </td></tr>
+
+        <!-- 카드 -->
+        <tr><td style="background-color:#ffffff;border-radius:16px;padding:40px 36px;box-shadow:0 1px 4px rgba(0,0,0,0.06);">
+
+          <p style="margin:0 0 6px 0;font-size:18px;font-weight:700;color:#111827;text-align:center;">
+            비밀번호 재설정
+          </p>
+          <p style="margin:0 0 32px 0;font-size:14px;color:#6b7280;text-align:center;line-height:1.6;">
+            아래 인증코드를 입력해 비밀번호를 재설정하세요.
+          </p>
+
+          <!-- 인증코드 박스 -->
+          <div style="background-color:#f0f5ff;border-radius:12px;padding:24px 16px;text-align:center;margin-bottom:32px;">
+            <p style="margin:0 0 6px 0;font-size:11px;font-weight:600;color:#2563eb;letter-spacing:0.08em;text-transform:uppercase;">
+              인증코드
+            </p>
+            <p style="margin:0;font-size:40px;font-weight:800;color:#1e3a8a;letter-spacing:0.15em;">
+              {otp}
+            </p>
+          </div>
+
+          <p style="margin:0 0 8px 0;font-size:13px;color:#6b7280;text-align:center;line-height:1.6;">
+            이 코드는 <strong style="color:#111827;">10분간</strong> 유효합니다.
+          </p>
+          <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;line-height:1.6;">
+            본인이 요청하지 않은 경우 이 메일을 무시해주세요.
+          </p>
+
+        </td></tr>
+
+        <!-- 푸터 -->
+        <tr><td align="center" style="padding-top:20px;">
+          <p style="margin:0;font-size:11px;color:#9ca3af;">
+            &copy; 2026 MEETIN. All rights reserved.
+          </p>
+        </td></tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+
+
+def _build_plain(otp: str) -> str:
+    return (
+        f"MEETIN. 비밀번호 재설정\n\n"
+        f"인증코드: {otp}\n\n"
+        f"이 코드는 10분간 유효합니다.\n"
+        f"본인이 요청하지 않은 경우 이 메일을 무시해주세요.\n\n"
+        f"© 2026 MEETIN."
+    )
+
+
 def _send_gmail(to_email: str, otp: str) -> None:
-    """Gmail SMTP SSL로 OTP 이메일 발송."""
+    """Gmail SMTP SSL로 OTP 이메일 발송 (HTML + plain text 멀티파트)."""
     msg = MIMEMultipart("alternative")
     msg["Subject"] = "[MEETIN.] 비밀번호 재설정 인증코드"
     msg["From"] = settings.gmail_user
     msg["To"] = to_email
 
-    body = (
-        f"안녕하세요, MEETIN. 입니다.\n\n"
-        f"비밀번호 재설정 인증코드: {otp}\n\n"
-        f"이 코드는 10분간 유효합니다.\n"
-        f"본인이 요청하지 않은 경우 이 이메일을 무시해주세요.\n\n"
-        f"— MEETIN. 팀"
-    )
-    msg.attach(MIMEText(body, "plain", "utf-8"))
+    msg.attach(MIMEText(_build_plain(otp), "plain", "utf-8"))
+    msg.attach(MIMEText(_build_html(otp), "html", "utf-8"))
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
         server.login(settings.gmail_user, settings.gmail_app_password)
