@@ -288,11 +288,10 @@ async def verify_email_otp(request: Request, payload: VerifyEmailOtpRequest):
     import app.services.email_otp as email_otp
 
     email = payload.email.strip().lower()
+    reset_token, exceeded = await email_otp.verify_otp_and_issue_reset_token(email, payload.otp)
 
-    if await email_otp.is_attempts_exceeded(email):
+    if exceeded:
         raise HTTPException(status_code=429, detail="인증 시도 횟수를 초과했습니다. 인증코드를 다시 받아주세요.")
-
-    reset_token = await email_otp.verify_otp_and_issue_reset_token(email, payload.otp)
     if not reset_token:
         raise HTTPException(status_code=400, detail="인증코드가 올바르지 않습니다.")
 

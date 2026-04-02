@@ -187,45 +187,50 @@ async def send_otp(email: str) -> bool:
 RESET_TOKEN_TTL = 300  # reset_token 유효 시간: 5분
 
 
-async def is_attempts_exceeded(email: str) -> bool:
-    """현재 시도 횟수가 한도를 초과했는지 확인 (OTP 소비 없음)."""
-    attempts_raw = await _fetch(f"email_otp_attempts:{email}")
-    attempts = int(attempts_raw) if attempts_raw and attempts_raw.isdigit() else 0
-    return attempts >= MAX_ATTEMPTS
+async def _get_attempts(email: str) -> int:
+    raw = await _fetch(f"email_otp_attempts:{email}")
+    if raw is None:
+        return 0
+    try:
+        return int(raw)
+    except (ValueError, TypeError):
+        return 0
 
 
-async def verify_otp_and_issue_reset_token(email: str, otp: str) -> str | None:
+async def verify_otp_and_issue_reset_token(email: str, otp: str) -> tuple[str | None, bool]:
     """OTP 검증 후 소비 → 비밀번호 재설정용 단기 토큰 발급.
 
     Returns:
-        reset_token (str) — 성공 (5분 유효, 1회용)
-        None               — 실패 (OTP 불일치 / 만료 / 횟수 초과)
+        (reset_token, exceeded)
+        - reset_token이 None이 아니면 성공
+        - exceeded=True이면 시도 횟수 초과 (재발급 필요)
     """
     import secrets as _secrets
 
-    attempts_raw = await _fetch(f"email_otp_attempts:{email}")
-    attempts = int(attempts_raw) if attempts_raw and attempts_raw.isdigit() else 0
+    attempts = await _get_attempts(email)
 
+    # 이미 초과 상태
     if attempts >= MAX_ATTEMPTS:
-        await _delete(f"email_otp:{email}")
-        await _delete(f"email_otp_attempts:{email}")
-        logger.warning("[EMAIL OTP] 시도 횟수 초과 → OTP 폐기: %s", email)
-        return None
+        logger.warning("[EMAIL OTP] 시도 횟수 초과 상태: %s", email)
+        return None, True
 
     stored_hash = await _fetch(f"email_otp:{email}")
     if not stored_hash or stored_hash != _hash_otp(otp):
-        await _store(f"email_otp_attempts:{email}", str(attempts + 1), OTP_TTL)
-        logger.warning("[EMAIL OTP] 인증 실패 (%d/%d): %s", attempts + 1, MAX_ATTEMPTS, email)
-        return None
+        new_attempts = attempts + 1
+        await _store(f"email_otp_attempts:{email}", str(new_attempts), OTP_TTL)
+        logger.warning("[EMAIL OTP] 인증 실패 (%d/%d): %s", new_attempts, MAX_ATTEMPTS, email)
+        # 이번 시도로 한도 도달 → exceeded 반환
+        exceeded = new_attempts >= MAX_ATTEMPTS
+        return None, exceeded
 
-    # OTP 검증 성공 → OTP + 카운터 삭제 후 reset_token 발급
+    # 성공 → OTP + 카운터 삭제, reset_token 발급
     await _delete(f"email_otp:{email}")
     await _delete(f"email_otp_attempts:{email}")
 
     reset_token = _secrets.token_urlsafe(32)
     await _store(f"email_reset_token:{email}", reset_token, RESET_TOKEN_TTL)
     logger.info("[EMAIL OTP] OTP 검증 성공, reset_token 발급: %s", email)
-    return reset_token
+    return reset_token, False
 
 
 async def consume_reset_token(email: str, token: str) -> bool:
