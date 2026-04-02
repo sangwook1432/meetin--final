@@ -301,7 +301,7 @@ function ResetPasswordModal({ onClose }: { onClose: () => void }) {
                 {i < STEPS.indexOf(step) ? "✓" : i + 1}
               </div>
               <span className={`text-xs ${step === s ? "font-semibold text-gray-800" : "text-gray-400"}`}>
-                {STEP_LABELS[s]}
+                {STEP_LABELS[s as keyof typeof STEP_LABELS]}
               </span>
               {i < STEPS.length - 1 && <div className="h-px w-6 bg-gray-200" />}
             </div>
