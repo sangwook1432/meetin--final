@@ -278,6 +278,7 @@ function ResetPasswordModal({ onClose }: { onClose: () => void }) {
         setOtp("");
         setResetError(msg + " 아래 재발송 버튼을 눌러주세요.");
       } else {
+        setOtp("");
         setResetError(msg);
       }
     } finally {
