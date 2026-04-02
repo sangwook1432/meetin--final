@@ -306,9 +306,14 @@ async def reset_password(request: Request, payload: ResetPasswordRequest, db: Se
         raise HTTPException(status_code=400, detail="비밀번호에 특수문자를 1자 이상 포함해야 합니다.")
 
     email = payload.email.strip().lower()
+
+    # 시도 횟수 초과 여부 먼저 확인
+    if await email_otp.is_attempts_exceeded(email):
+        raise HTTPException(status_code=429, detail="인증 시도 횟수를 초과했습니다. 인증코드를 다시 받아주세요.")
+
     valid = await email_otp.verify_otp(email, payload.otp)
     if not valid:
-        raise HTTPException(status_code=400, detail="인증코드가 올바르지 않거나 만료되었습니다.")
+        raise HTTPException(status_code=400, detail="인증코드가 올바르지 않습니다.")
 
     user = db.query(User).filter(User.email == email).first()
 

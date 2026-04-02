@@ -279,8 +279,15 @@ function ResetPasswordModal({ onClose }: { onClose: () => void }) {
       await resetPasswordByEmail(email.trim().toLowerCase(), otp, newPw);
       setStep("done");
     } catch (err) {
-      setResetError(err instanceof Error ? err.message : "오류가 발생했습니다.");
-      setStep("otp");
+      const msg = err instanceof Error ? err.message : "오류가 발생했습니다.";
+      if (msg.includes("횟수를 초과")) {
+        setOtp("");
+        setStep("otp");
+        setResetError(msg + " 아래 재발송 버튼을 눌러주세요.");
+      } else {
+        setStep("otp");
+        setResetError(msg);
+      }
     } finally {
       setLoading(false);
     }
