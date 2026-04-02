@@ -34,6 +34,7 @@ export default function PrivacyPage() {
                   <li>이메일 주소</li>
                   <li>휴대폰 번호 (HMAC 암호화 저장, 뒷 4자리만 평문 보관)</li>
                   <li>실명 (휴대폰 본인인증을 통해 수집)</li>
+                  <li>CI(연계정보) — 휴대폰 본인인증 시 KG이니시스로부터 수신, 중복 가입 방지 목적으로 활용</li>
                   <li>비밀번호 (단방향 암호화 저장)</li>
                 </ul>
               </div>
