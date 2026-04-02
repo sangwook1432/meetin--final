@@ -5,7 +5,7 @@ import Link from "next/link";
 import Script from "next/script";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { certifyPhone, findUsernameByToken, resetPasswordByToken } from "@/lib/api";
+import { certifyPhone, findUsernameByToken, sendPasswordResetOtp, resetPasswordByEmail } from "@/lib/api";
 
 const IMP_CODE = process.env.NEXT_PUBLIC_IMP_CODE ?? "";
 const IMP_CERT_CHANNEL_KEY = process.env.NEXT_PUBLIC_IMP_CERT_CHANNEL_KEY ?? "";
@@ -235,21 +235,35 @@ function FindIdModal({ onClose }: { onClose: () => void }) {
 
 // ─── 비밀번호 찾기 모달 ───────────────────────────────────
 
-type ResetStep = "phone" | "newpw" | "done";
+type ResetStep = "email" | "otp" | "newpw" | "done";
 
 function ResetPasswordModal({ onClose }: { onClose: () => void }) {
-  const cert = useCertifyFlow();
-  const [step, setStep] = useState<ResetStep>("phone");
-  const [verifiedToken, setVerifiedToken] = useState<string | null>(null);
+  const [step, setStep] = useState<ResetStep>("email");
+  const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
   const [resetError, setResetError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const handleVerifyPhone = async () => {
-    const token = await cert.certify();
-    if (!token) return;
-    setVerifiedToken(token);
+  const handleSendOtp = async (e: FormEvent) => {
+    e.preventDefault();
+    setResetError(null);
+    setLoading(true);
+    try {
+      await sendPasswordResetOtp(email.trim().toLowerCase());
+      setStep("otp");
+    } catch (err) {
+      setResetError(err instanceof Error ? err.message : "오류가 발생했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e: FormEvent) => {
+    e.preventDefault();
+    setResetError(null);
+    if (otp.length !== 6) { setResetError("6자리 인증코드를 입력해주세요."); return; }
     setStep("newpw");
   };
 
@@ -258,59 +272,90 @@ function ResetPasswordModal({ onClose }: { onClose: () => void }) {
     setResetError(null);
     if (newPw !== confirmPw) { setResetError("비밀번호가 일치하지 않습니다."); return; }
     if (newPw.length < 8) { setResetError("비밀번호는 8자 이상이어야 합니다."); return; }
-    if (!verifiedToken) return;
     setLoading(true);
     try {
-      await resetPasswordByToken(verifiedToken, newPw);
+      await resetPasswordByEmail(email.trim().toLowerCase(), otp, newPw);
       setStep("done");
     } catch (err) {
       setResetError(err instanceof Error ? err.message : "오류가 발생했습니다.");
+      setStep("otp");
     } finally {
       setLoading(false);
     }
   };
 
+  const STEPS: ResetStep[] = ["email", "otp", "newpw"];
+  const STEP_LABELS = { email: "이메일 입력", otp: "인증코드 확인", newpw: "새 비밀번호" };
+
   return (
     <ModalShell title="비밀번호 찾기" onClose={onClose}>
       {step !== "done" && (
         <div className="mb-5 flex items-center gap-2">
-          {(["phone", "newpw"] as ResetStep[]).map((s, i) => (
+          {STEPS.map((s, i) => (
             <div key={s} className="flex items-center gap-2">
               <div className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
                 step === s ? "bg-blue-600 text-white"
-                : i < ["phone", "newpw"].indexOf(step) ? "bg-emerald-500 text-white"
+                : i < STEPS.indexOf(step) ? "bg-emerald-500 text-white"
                 : "bg-gray-200 text-gray-500"
               }`}>
-                {i < ["phone", "newpw"].indexOf(step) ? "✓" : i + 1}
+                {i < STEPS.indexOf(step) ? "✓" : i + 1}
               </div>
               <span className={`text-xs ${step === s ? "font-semibold text-gray-800" : "text-gray-400"}`}>
-                {s === "phone" ? "본인인증" : "새 비밀번호 설정"}
+                {STEP_LABELS[s]}
               </span>
-              {i < 1 && <div className="h-px w-6 bg-gray-200" />}
+              {i < STEPS.length - 1 && <div className="h-px w-6 bg-gray-200" />}
             </div>
           ))}
         </div>
       )}
 
-      {step === "phone" && (
-        <div className="space-y-4">
-          <p className="text-sm text-gray-500">가입 시 등록한 전화번호로 본인인증해주세요.</p>
-
-          {cert.error && (
-            <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">
-              {cert.error}
-            </div>
+      {step === "email" && (
+        <form onSubmit={handleSendOtp} className="space-y-4">
+          <p className="text-sm text-gray-500">가입 시 등록한 이메일을 입력해주세요. 인증코드를 보내드립니다.</p>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">이메일</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+              placeholder="example@gmail.com" required className={inputCls} />
+          </div>
+          {resetError && (
+            <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">{resetError}</div>
           )}
-
-          <button
-            type="button"
-            onClick={handleVerifyPhone}
-            disabled={cert.certLoading}
-            className="w-full rounded-xl bg-gray-800 py-3 text-sm font-bold text-white hover:bg-gray-700 disabled:opacity-40 transition-all"
-          >
-            {cert.certLoading ? "인증 진행 중..." : "휴대폰 본인인증"}
+          <button type="submit" disabled={loading}
+            className="w-full rounded-xl bg-gray-800 py-3 text-sm font-bold text-white hover:bg-gray-700 disabled:opacity-40 transition-all">
+            {loading ? "발송 중..." : "인증코드 받기"}
           </button>
-        </div>
+        </form>
+      )}
+
+      {step === "otp" && (
+        <form onSubmit={handleVerifyOtp} className="space-y-4">
+          <p className="text-sm text-gray-500">
+            <span className="font-semibold text-gray-800">{email}</span>로 발송된 6자리 인증코드를 입력해주세요.
+          </p>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">인증코드</label>
+            <input type="text" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="000000" required maxLength={6} inputMode="numeric"
+              className={`${inputCls} text-center text-lg tracking-[0.4em] font-bold`} />
+          </div>
+          {resetError && (
+            <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">{resetError}</div>
+          )}
+          <div className="flex gap-3">
+            <button type="button" onClick={() => { setStep("email"); setOtp(""); setResetError(null); }}
+              className="flex-1 rounded-xl border border-gray-200 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-all">
+              이전
+            </button>
+            <button type="submit" disabled={otp.length !== 6}
+              className="flex-1 rounded-xl bg-blue-600 py-3 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50 active:scale-95 transition-all">
+              확인
+            </button>
+          </div>
+          <button type="button" onClick={handleSendOtp} disabled={loading}
+            className="w-full text-center text-xs text-gray-400 hover:text-blue-500 transition-colors disabled:opacity-40">
+            {loading ? "발송 중..." : "인증코드 재발송"}
+          </button>
+        </form>
       )}
 
       {step === "newpw" && (
@@ -338,7 +383,7 @@ function ResetPasswordModal({ onClose }: { onClose: () => void }) {
             <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">{resetError}</div>
           )}
           <div className="flex gap-3">
-            <button type="button" onClick={() => { setStep("phone"); setResetError(null); }}
+            <button type="button" onClick={() => { setStep("otp"); setResetError(null); }}
               className="flex-1 rounded-xl border border-gray-200 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-all">
               이전
             </button>

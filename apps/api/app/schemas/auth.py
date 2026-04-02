@@ -21,6 +21,7 @@ class PhoneVerifyResponse(BaseModel):
 
 class RegisterRequest(BaseModel):
     username: str = Field(min_length=3, max_length=50)
+    email: str = Field(max_length=255)
     password: str = Field(min_length=8, max_length=72)
     phone_token: str  # POST /auth/phone/certify 후 발급된 토큰
 
@@ -30,6 +31,14 @@ class RegisterRequest(BaseModel):
         if not re.match(r'^[a-zA-Z0-9_.\-]+$', v):
             raise ValueError("아이디는 영문, 숫자, _, -, . 만 사용 가능합니다.")
         return v.lower()
+
+    @field_validator("email")
+    @classmethod
+    def email_format(cls, v: str) -> str:
+        v = v.strip().lower()
+        if not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', v):
+            raise ValueError("올바른 이메일 주소를 입력해주세요.")
+        return v
 
     @field_validator("password")
     @classmethod

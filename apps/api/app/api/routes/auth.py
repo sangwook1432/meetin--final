@@ -72,8 +72,13 @@ class FindEmailRequest(BaseModel):
     phone_token: str
 
 
+class SendEmailOtpRequest(BaseModel):
+    email: str
+
+
 class ResetPasswordRequest(BaseModel):
-    phone_token: str
+    email: str
+    otp: str
     new_password: str
 
 
@@ -132,6 +137,9 @@ async def register(request: Request, response: Response, payload: RegisterReques
     if db.query(User).filter(User.username == username).first():
         raise HTTPException(status_code=409, detail="이미 사용 중인 아이디입니다.")
 
+    if db.query(User).filter(User.email == payload.email).first():
+        raise HTTPException(status_code=409, detail="이미 사용 중인 이메일입니다.")
+
     # 토큰 소비 전에 먼저 유효성 확인 (중복 검사 실패 시 토큰 보존)
     e164 = await pass_auth.peek_phone_token(payload.phone_token)
     if not e164:
@@ -166,6 +174,7 @@ async def register(request: Request, response: Response, payload: RegisterReques
 
     user = User(
         username=username,
+        email=payload.email,
         password_hash=hash_password(payload.password),
         phone_hash=phash,
         phone_last4=phone_last4(e164),
@@ -267,23 +276,43 @@ async def find_username(request: Request, payload: FindEmailRequest, db: Session
     return {"masked_username": masked_username}
 
 
+@router.post("/email/send-otp")
+@_rate_limit("5/minute")
+async def send_email_otp(request: Request, payload: SendEmailOtpRequest, db: Session = Depends(get_db)):
+    """비밀번호 재설정용 이메일 OTP 발송."""
+    import app.services.email_otp as email_otp
+
+    email = payload.email.strip().lower()
+    user = db.query(User).filter(User.email == email).first()
+
+    # 미등록 이메일도 200 반환 — 이메일 존재 여부 열거 방지
+    if user:
+        ok = await email_otp.send_otp(email)
+        if not ok:
+            raise HTTPException(status_code=500, detail="인증코드 발송에 실패했습니다. 잠시 후 다시 시도해주세요.")
+
+    return {"status": "ok"}
+
+
 @router.post("/reset-password")
 @_rate_limit("5/minute")
 async def reset_password(request: Request, payload: ResetPasswordRequest, db: Session = Depends(get_db)):
-    """휴대폰 본인인증 후 비밀번호 재설정."""
-    e164 = await pass_auth.consume_phone_token(payload.phone_token)
-    if not e164:
-        raise HTTPException(status_code=400, detail="휴대폰 인증이 필요합니다.")
+    """이메일 OTP 검증 후 비밀번호 재설정."""
+    import app.services.email_otp as email_otp
 
     if len(payload.new_password) < 8:
         raise HTTPException(status_code=400, detail="비밀번호는 8자 이상이어야 합니다.")
     if not re.search(r"[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?`~]", payload.new_password):
         raise HTTPException(status_code=400, detail="비밀번호에 특수문자를 1자 이상 포함해야 합니다.")
 
-    phash = phone_hmac_hash(e164)
-    user = db.query(User).filter(User.phone_hash == phash).first()
+    email = payload.email.strip().lower()
+    valid = await email_otp.verify_otp(email, payload.otp)
+    if not valid:
+        raise HTTPException(status_code=400, detail="인증코드가 올바르지 않거나 만료되었습니다.")
 
-    # 계정 미존재 시에도 200 — 전화번호 등록 여부 열거 방지
+    user = db.query(User).filter(User.email == email).first()
+
+    # 계정 미존재 시에도 200 — 이메일 등록 여부 열거 방지
     if not user:
         return {"status": "ok"}
 

@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     r2_bucket_name: str = Field(default="meetin-uploads", alias="R2_BUCKET_NAME")
     r2_public_url: str = Field(default="", alias="R2_PUBLIC_URL")
 
+    # ─── Gmail SMTP ──────────────────────────────────────────────
+    gmail_user: str = Field(default="", alias="GMAIL_USER")
+    gmail_app_password: str = Field(default="", alias="GMAIL_APP_PASSWORD")
+
     # ─── Sentry ──────────────────────────────────────────────────
     sentry_dsn: str = Field(default="", alias="SENTRY_DSN")
 

@@ -17,6 +17,7 @@ export default function RegisterPage() {
 
   const [form, setForm] = useState({
     username: "",
+    email: "",
     password: "",
     passwordConfirm: "",
   });
@@ -111,6 +112,7 @@ export default function RegisterPage() {
     try {
       const tokens = await registerApi({
         username: form.username.trim().toLowerCase(),
+        email: form.email.trim().toLowerCase(),
         password: form.password,
         phone_token: phoneToken,
       });
@@ -143,6 +145,18 @@ export default function RegisterPage() {
               value={form.username}
               onChange={set("username")}
               placeholder="3자 이상, 영문 소문자 권장"
+              required
+              className={inputCls}
+            />
+          </Field>
+
+          {/* 이메일 */}
+          <Field label="이메일" hint="비밀번호 찾기에 사용됩니다">
+            <input
+              type="email"
+              value={form.email}
+              onChange={set("email")}
+              placeholder="example@gmail.com"
               required
               className={inputCls}
             />

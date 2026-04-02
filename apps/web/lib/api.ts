@@ -177,15 +177,32 @@ export async function findUsernameByToken(phone_token: string): Promise<{ masked
   return res.json();
 }
 
-/** POST /auth/reset-password — phone_token으로 비밀번호 재설정 */
-export async function resetPasswordByToken(
-  phone_token: string,
+/** POST /auth/email/send-otp — 비밀번호 재설정 이메일 OTP 발송 */
+export async function sendPasswordResetOtp(email: string): Promise<{ status: string }> {
+  const res = await fetch(`${BASE}/auth/email/send-otp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = body?.detail;
+    if (typeof detail === "string") throw new Error(detail);
+    throw new Error("인증코드 발송 실패");
+  }
+  return res.json();
+}
+
+/** POST /auth/reset-password — 이메일 OTP 검증 후 비밀번호 재설정 */
+export async function resetPasswordByEmail(
+  email: string,
+  otp: string,
   newPassword: string
 ): Promise<{ status: string }> {
   const res = await fetch(`${BASE}/auth/reset-password`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ phone_token, new_password: newPassword }),
+    body: JSON.stringify({ email, otp, new_password: newPassword }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -228,6 +245,7 @@ export async function getPhoneTokenInfo(token: string): Promise<{
 /** POST /auth/register */
 export async function registerApi(payload: {
   username: string;
+  email: string;
   password: string;
   phone_token: string;
 }): Promise<TokenResponse> {
