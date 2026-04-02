@@ -22,6 +22,7 @@ export interface UserPublic {
   verification_status: VerificationStatus;
   is_admin: boolean;
   phone: string | null;
+  email: string | null;
   real_name: string | null;
   nickname: string | null;
   gender: Gender | null;

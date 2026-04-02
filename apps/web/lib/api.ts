@@ -277,6 +277,7 @@ export async function getMe(): Promise<UserPublic> {
 }
 
 export async function updateProfile(payload: Partial<{
+  email: string;
   nickname: string;
   gender: "MALE" | "FEMALE";
   university: string;

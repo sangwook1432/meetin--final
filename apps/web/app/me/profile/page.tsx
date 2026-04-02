@@ -50,6 +50,7 @@ function ProfileInner() {
   const isOnboarding = searchParams.get("onboarding") === "1";
 
   const [form, setForm] = useState({
+    email: "",
     nickname: "",
     gender: "" as Gender | "",
     university: "",
@@ -99,6 +100,7 @@ function ProfileInner() {
       ? "직접입력"
       : "";
     setForm({
+      email: user.email ?? "",
       nickname: user.nickname ?? "",
       gender: user.gender ?? "",
       university: uni,
@@ -134,6 +136,7 @@ function ProfileInner() {
     setSaving(true);
     try {
       await updateProfile({
+        email: form.email.trim().toLowerCase() || undefined,
         nickname: form.nickname || undefined,
         university: isOnboarding ? (uniValue || undefined) : undefined,
         major: isOnboarding ? (form.major || undefined) : undefined,
@@ -254,6 +257,11 @@ function ProfileInner() {
                 </div>
               </FormField>
             </div>
+            <FormField label="이메일" hint="비밀번호 찾기에 사용됩니다">
+              <input type="email" value={form.email} onChange={set("email")}
+                placeholder="example@gmail.com" maxLength={255} className={inputCls} />
+            </FormField>
+
             <FormField label="닉네임">
               <input type="text" value={form.nickname} onChange={set("nickname")}
                 placeholder="닉네임 (선택)" maxLength={50} className={inputCls} />

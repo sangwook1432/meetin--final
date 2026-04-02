@@ -45,7 +45,7 @@ def me(user: User = Depends(get_current_user)):
 
 
 _PROFILE_ALLOWED_FIELDS = {
-    "nickname", "gender", "university", "major", "entry_year", "age",
+    "email", "nickname", "gender", "university", "major", "entry_year", "age",
     "preferred_area", "bio_short", "lookalike_type", "lookalike_value",
 }
 
@@ -56,6 +56,17 @@ def update_profile(
     user: User = Depends(get_current_user),
 ):
     data = payload.model_dump(exclude_unset=True)
+
+    if "email" in data and data["email"] is not None:
+        import re
+        email = data["email"].strip().lower()
+        if not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
+            raise HTTPException(400, "올바른 이메일 주소를 입력해주세요.")
+        conflict = db.query(User).filter(User.email == email, User.id != user.id).first()
+        if conflict:
+            raise HTTPException(409, "이미 사용 중인 이메일입니다.")
+        data["email"] = email
+
     for k, v in data.items():
         if k not in _PROFILE_ALLOWED_FIELDS:
             raise HTTPException(400, f"수정할 수 없는 필드입니다: {k}")

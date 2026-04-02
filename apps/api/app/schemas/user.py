@@ -11,6 +11,7 @@ class UserPublic(BaseModel):
     is_admin: bool
 
     phone: str | None = None          # 복호화된 전화번호 (표시용, e.g. 01012345678)
+    email: str | None = None
     real_name: str | None = None
     nickname: str | None = None
     gender: Gender | None = None
@@ -34,6 +35,7 @@ class UserPublic(BaseModel):
 
 
 class ProfileUpdateRequest(BaseModel):
+    email: str | None = Field(default=None, max_length=255)
     nickname: str | None = Field(default=None, max_length=50)
     gender: Gender | None = None
     university: str | None = Field(default=None, max_length=100)
