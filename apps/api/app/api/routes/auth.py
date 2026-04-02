@@ -76,9 +76,14 @@ class SendEmailOtpRequest(BaseModel):
     email: str
 
 
-class ResetPasswordRequest(BaseModel):
+class VerifyEmailOtpRequest(BaseModel):
     email: str
     otp: str
+
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    reset_token: str
     new_password: str
 
 
@@ -276,6 +281,24 @@ async def find_username(request: Request, payload: FindEmailRequest, db: Session
     return {"masked_username": masked_username}
 
 
+@router.post("/email/verify-otp")
+@_rate_limit("10/minute")
+async def verify_email_otp(request: Request, payload: VerifyEmailOtpRequest):
+    """이메일 OTP 검증 → 비밀번호 재설정용 reset_token 발급."""
+    import app.services.email_otp as email_otp
+
+    email = payload.email.strip().lower()
+
+    if await email_otp.is_attempts_exceeded(email):
+        raise HTTPException(status_code=429, detail="인증 시도 횟수를 초과했습니다. 인증코드를 다시 받아주세요.")
+
+    reset_token = await email_otp.verify_otp_and_issue_reset_token(email, payload.otp)
+    if not reset_token:
+        raise HTTPException(status_code=400, detail="인증코드가 올바르지 않습니다.")
+
+    return {"reset_token": reset_token}
+
+
 @router.post("/email/send-otp")
 @_rate_limit("5/minute")
 async def send_email_otp(request: Request, payload: SendEmailOtpRequest, db: Session = Depends(get_db)):
@@ -307,13 +330,9 @@ async def reset_password(request: Request, payload: ResetPasswordRequest, db: Se
 
     email = payload.email.strip().lower()
 
-    # 시도 횟수 초과 여부 먼저 확인
-    if await email_otp.is_attempts_exceeded(email):
-        raise HTTPException(status_code=429, detail="인증 시도 횟수를 초과했습니다. 인증코드를 다시 받아주세요.")
-
-    valid = await email_otp.verify_otp(email, payload.otp)
+    valid = await email_otp.consume_reset_token(email, payload.reset_token)
     if not valid:
-        raise HTTPException(status_code=400, detail="인증코드가 올바르지 않습니다.")
+        raise HTTPException(status_code=400, detail="재설정 세션이 만료되었습니다. 처음부터 다시 시도해주세요.")
 
     user = db.query(User).filter(User.email == email).first()
 

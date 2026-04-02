@@ -184,6 +184,9 @@ async def send_otp(email: str) -> bool:
     return True
 
 
+RESET_TOKEN_TTL = 300  # reset_token 유효 시간: 5분
+
+
 async def is_attempts_exceeded(email: str) -> bool:
     """현재 시도 횟수가 한도를 초과했는지 확인 (OTP 소비 없음)."""
     attempts_raw = await _fetch(f"email_otp_attempts:{email}")
@@ -191,8 +194,15 @@ async def is_attempts_exceeded(email: str) -> bool:
     return attempts >= MAX_ATTEMPTS
 
 
-async def verify_otp(email: str, otp: str) -> bool:
-    """OTP 검증 후 소비 (1회용). 일치 시 True. 5회 초과 시 OTP 삭제."""
+async def verify_otp_and_issue_reset_token(email: str, otp: str) -> str | None:
+    """OTP 검증 후 소비 → 비밀번호 재설정용 단기 토큰 발급.
+
+    Returns:
+        reset_token (str) — 성공 (5분 유효, 1회용)
+        None               — 실패 (OTP 불일치 / 만료 / 횟수 초과)
+    """
+    import secrets as _secrets
+
     attempts_raw = await _fetch(f"email_otp_attempts:{email}")
     attempts = int(attempts_raw) if attempts_raw and attempts_raw.isdigit() else 0
 
@@ -200,16 +210,28 @@ async def verify_otp(email: str, otp: str) -> bool:
         await _delete(f"email_otp:{email}")
         await _delete(f"email_otp_attempts:{email}")
         logger.warning("[EMAIL OTP] 시도 횟수 초과 → OTP 폐기: %s", email)
-        return False
+        return None
 
     stored_hash = await _fetch(f"email_otp:{email}")
     if not stored_hash or stored_hash != _hash_otp(otp):
-        # 실패 시 시도 횟수 증가
         await _store(f"email_otp_attempts:{email}", str(attempts + 1), OTP_TTL)
         logger.warning("[EMAIL OTP] 인증 실패 (%d/%d): %s", attempts + 1, MAX_ATTEMPTS, email)
-        return False
+        return None
 
-    # 성공 시 OTP + 카운터 삭제
+    # OTP 검증 성공 → OTP + 카운터 삭제 후 reset_token 발급
     await _delete(f"email_otp:{email}")
     await _delete(f"email_otp_attempts:{email}")
+
+    reset_token = _secrets.token_urlsafe(32)
+    await _store(f"email_reset_token:{email}", reset_token, RESET_TOKEN_TTL)
+    logger.info("[EMAIL OTP] OTP 검증 성공, reset_token 발급: %s", email)
+    return reset_token
+
+
+async def consume_reset_token(email: str, token: str) -> bool:
+    """reset_token 검증 후 소비 (1회용). 일치 시 True."""
+    stored = await _fetch(f"email_reset_token:{email}")
+    if not stored or stored != token:
+        return False
+    await _delete(f"email_reset_token:{email}")
     return True

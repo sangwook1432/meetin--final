@@ -5,7 +5,7 @@ import Link from "next/link";
 import Script from "next/script";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { certifyPhone, findUsernameByToken, sendPasswordResetOtp, resetPasswordByEmail } from "@/lib/api";
+import { certifyPhone, findUsernameByToken, sendPasswordResetOtp, verifyEmailOtp, resetPasswordByEmail } from "@/lib/api";
 
 const IMP_CODE = process.env.NEXT_PUBLIC_IMP_CODE ?? "";
 const IMP_CERT_CHANNEL_KEY = process.env.NEXT_PUBLIC_IMP_CERT_CHANNEL_KEY ?? "";
@@ -241,6 +241,7 @@ function ResetPasswordModal({ onClose }: { onClose: () => void }) {
   const [step, setStep] = useState<ResetStep>("email");
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
+  const [resetToken, setResetToken] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
   const [showNewPw, setShowNewPw] = useState(false);
@@ -266,7 +267,22 @@ function ResetPasswordModal({ onClose }: { onClose: () => void }) {
     e.preventDefault();
     setResetError(null);
     if (otp.length !== 6) { setResetError("6자리 인증코드를 입력해주세요."); return; }
-    setStep("newpw");
+    setLoading(true);
+    try {
+      const { reset_token } = await verifyEmailOtp(email.trim().toLowerCase(), otp);
+      setResetToken(reset_token);
+      setStep("newpw");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "오류가 발생했습니다.";
+      if (msg.includes("횟수를 초과")) {
+        setOtp("");
+        setResetError(msg + " 아래 재발송 버튼을 눌러주세요.");
+      } else {
+        setResetError(msg);
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleResetSubmit = async (e: FormEvent) => {
@@ -276,18 +292,14 @@ function ResetPasswordModal({ onClose }: { onClose: () => void }) {
     if (newPw.length < 8) { setResetError("비밀번호는 8자 이상이어야 합니다."); return; }
     setLoading(true);
     try {
-      await resetPasswordByEmail(email.trim().toLowerCase(), otp, newPw);
+      await resetPasswordByEmail(email.trim().toLowerCase(), resetToken, newPw);
       setStep("done");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "오류가 발생했습니다.";
-      if (msg.includes("횟수를 초과")) {
-        setOtp("");
-        setStep("otp");
-        setResetError(msg + " 아래 재발송 버튼을 눌러주세요.");
-      } else {
-        setStep("otp");
-        setResetError(msg);
-      }
+      setOtp("");
+      setResetToken("");
+      setStep("email");
+      setResetError(msg);
     } finally {
       setLoading(false);
     }

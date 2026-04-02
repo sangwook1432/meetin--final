@@ -177,6 +177,22 @@ export async function findUsernameByToken(phone_token: string): Promise<{ masked
   return res.json();
 }
 
+/** POST /auth/email/verify-otp — OTP 검증 후 reset_token 발급 */
+export async function verifyEmailOtp(email: string, otp: string): Promise<{ reset_token: string }> {
+  const res = await fetch(`${BASE}/auth/email/verify-otp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, otp }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = body?.detail;
+    if (typeof detail === "string") throw new Error(detail);
+    throw new Error("인증코드 확인 실패");
+  }
+  return res.json();
+}
+
 /** POST /auth/email/send-otp — 비밀번호 재설정 이메일 OTP 발송 */
 export async function sendPasswordResetOtp(email: string): Promise<{ status: string }> {
   const res = await fetch(`${BASE}/auth/email/send-otp`, {
@@ -193,16 +209,16 @@ export async function sendPasswordResetOtp(email: string): Promise<{ status: str
   return res.json();
 }
 
-/** POST /auth/reset-password — 이메일 OTP 검증 후 비밀번호 재설정 */
+/** POST /auth/reset-password — reset_token으로 비밀번호 재설정 */
 export async function resetPasswordByEmail(
   email: string,
-  otp: string,
+  reset_token: string,
   newPassword: string
 ): Promise<{ status: string }> {
   const res = await fetch(`${BASE}/auth/reset-password`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, otp, new_password: newPassword }),
+    body: JSON.stringify({ email, reset_token, new_password: newPassword }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
