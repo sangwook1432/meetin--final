@@ -15,9 +15,15 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("users", sa.Column("email", sa.String(255), nullable=True))
-    op.create_unique_constraint("uq_users_email", "users", ["email"])
-    op.create_index("ix_users_email", "users", ["email"])
+    conn = op.get_bind()
+    result = conn.execute(sa.text(
+        "SELECT 1 FROM information_schema.columns "
+        "WHERE table_name='users' AND column_name='email'"
+    )).fetchone()
+    if not result:
+        op.add_column("users", sa.Column("email", sa.String(255), nullable=True))
+        op.create_unique_constraint("uq_users_email", "users", ["email"])
+        op.create_index("ix_users_email", "users", ["email"])
 
 
 def downgrade() -> None:
