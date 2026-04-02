@@ -185,6 +185,9 @@ export async function verifyEmailOtp(email: string, otp: string): Promise<{ rese
     body: JSON.stringify({ email, otp }),
   });
   if (!res.ok) {
+    if (res.status === 429) {
+      throw new Error("인증 시도 횟수를 초과했습니다. 인증코드를 다시 받아주세요.");
+    }
     const body = await res.json().catch(() => ({}));
     const detail = body?.detail;
     if (typeof detail === "string") throw new Error(detail);
