@@ -317,10 +317,7 @@ async def find_username(request: Request, payload: FindUsernameRequest, db: Sess
     if not user or not user.username:
         return {"masked_username": None}
 
-    uname = user.username
-    visible = uname[:2] if len(uname) >= 2 else uname
-    masked_username = f"{visible}{'*' * max(3, len(uname) - 2)}"
-    return {"masked_username": masked_username}
+    return {"masked_username": user.username}
 
 
 @router.post("/email/verify-otp")

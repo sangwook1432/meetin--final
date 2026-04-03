@@ -276,7 +276,6 @@ function FindIdModal({ onClose }: { onClose: () => void }) {
             <p className="text-xs text-blue-500 mb-1">가입된 아이디</p>
             <p className="text-base font-bold text-blue-800 tracking-wide">{result}</p>
           </div>
-          <p className="text-center text-xs text-gray-400">보안을 위해 일부 문자는 *로 표시됩니다.</p>
           <button onClick={onClose} className="w-full rounded-xl bg-gray-100 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-200 transition-all">
             닫기
           </button>
