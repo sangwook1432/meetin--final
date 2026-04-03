@@ -270,7 +270,7 @@ export default function PreregisterPage() {
                 placeholder="010-1234-5678"
                 value={formatPhone(phone)}
                 onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 11))}
-                className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                 required
               />
             </div>
@@ -313,7 +313,7 @@ export default function PreregisterPage() {
                 maxLength={6}
                 value={otp}
                 onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                className="w-full rounded-xl border border-gray-200 px-4 py-3 text-center text-xl font-bold tracking-[0.4em] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className="w-full rounded-xl border border-gray-200 px-4 py-3 text-center text-xl font-bold tracking-[0.4em] text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                 autoFocus
                 required
               />
