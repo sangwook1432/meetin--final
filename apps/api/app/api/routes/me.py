@@ -3,10 +3,11 @@ import uuid
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 
 from app.core.deps import get_db, get_current_user, require_verified
 from app.models.user import User
-from app.models.verification_doc import VerificationDoc, DocType
+from app.models.verification_doc import VerificationDoc, DocType, DocStatus
 from app.core.crypto import decrypt_phone
 from app.core.storage import upload_file, compress_image
 from app.schemas.user import UserPublic, ProfileUpdateRequest
@@ -255,12 +256,27 @@ async def upload_doc_file(
 
     file_url = upload_file(content, save_name, ext)
 
-    doc = VerificationDoc(
-        user_id=user.id,
-        doc_type=doc_type_enum,
-        file_url=file_url,
-    )
-    db.add(doc)
+    # SUBMITTED(미검토) 상태의 기존 doc이 있으면 file_url만 교체
+    existing_doc = db.execute(
+        select(VerificationDoc)
+        .where(
+            VerificationDoc.user_id == user.id,
+            VerificationDoc.status == DocStatus.SUBMITTED,
+        )
+        .order_by(VerificationDoc.id.desc())
+    ).scalars().first()
+
+    if existing_doc:
+        existing_doc.file_url = file_url
+        doc = existing_doc
+    else:
+        doc = VerificationDoc(
+            user_id=user.id,
+            doc_type=doc_type_enum,
+            file_url=file_url,
+        )
+        db.add(doc)
+
     db.commit()
     db.refresh(doc)
     return doc

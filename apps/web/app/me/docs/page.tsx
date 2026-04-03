@@ -128,6 +128,18 @@ function DocsInner() {
             >
               {isOnboarding ? "미팅 먼저 둘러보기 →" : "확인"}
             </button>
+            <button
+              onClick={() => {
+                if (docPendingKey) localStorage.removeItem(docPendingKey);
+                setDocSubmitted(false);
+                setFile(null);
+                setPreview(null);
+                setError(null);
+              }}
+              className="mt-3 w-full rounded-xl border border-yellow-300 py-3 text-sm font-semibold text-yellow-700 hover:bg-yellow-100 transition-all"
+            >
+              잘못 올렸나요? 다시 제출하기
+            </button>
           </div>
         </div>
       </AppShell>
