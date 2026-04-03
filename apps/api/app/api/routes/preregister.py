@@ -44,9 +44,10 @@ class PreregisterIn(BaseModel):
 # ── OTP 발송 ─────────────────────────────────────────────────────────
 
 @router.post("/preregister/send-otp")
-async def preregister_send_otp(payload: SendOtpIn):
+async def preregister_send_otp(payload: SendOtpIn, db: Session = Depends(get_db)):
     """사전예약용 SMS OTP 발송.
 
+    - 중복 번호 사전 차단 (SMS 발송 전)
     - 60초 재요청 제한
     - SOLAPI 미설정 시 mock 모드 (OTP=000000, 발송 없음)
     """
@@ -54,6 +55,11 @@ async def preregister_send_otp(payload: SendOtpIn):
         phone = normalize_phone_domestic(payload.phone)
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+    e164 = normalize_phone_kr_to_e164(phone)
+    phash = phone_hmac_hash(e164)
+    if db.execute(select(Preregistration).where(Preregistration.phone_hash == phash)).scalar_one_or_none():
+        raise HTTPException(409, "이미 사전예약된 번호입니다.")
 
     result = await send_otp(phone)
 
