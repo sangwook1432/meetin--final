@@ -115,7 +115,8 @@ async def _get_attempts(phone: str) -> int:
 # ── SOLAPI 발송 ──────────────────────────────────────────────────────
 def _build_auth_header(api_key: str, api_secret: str) -> str:
     """HMAC-SHA256 인증 헤더 생성."""
-    timestamp = str(int(time.time() * 1000))
+    from datetime import datetime, timezone
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
     salt = secrets.token_hex(16)
     signature = hmac.new(
         api_secret.encode("utf-8"),
