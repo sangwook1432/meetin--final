@@ -161,12 +161,25 @@ export async function logoutApi(): Promise<void> {
   await fetch(`${BASE}/auth/logout`, { method: "POST", credentials: "include" });
 }
 
-/** POST /auth/find-username — phone_token으로 가입 아이디 찾기 */
-export async function findUsernameByToken(phone_token: string): Promise<{ masked_username: string | null }> {
+/** POST /auth/find-username/send-otp — 아이디 찾기용 SMS OTP 발송 */
+export async function sendFindUsernameOtp(phone: string): Promise<void> {
+  const res = await fetch(`${BASE}/auth/find-username/send-otp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ phone }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.detail ?? "SMS 발송 실패");
+  }
+}
+
+/** POST /auth/find-username — SMS OTP 검증 후 아이디 찾기 */
+export async function findUsernameByOtp(phone: string, otp: string): Promise<{ masked_username: string | null }> {
   const res = await fetch(`${BASE}/auth/find-username`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ phone_token }),
+    body: JSON.stringify({ phone, otp }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

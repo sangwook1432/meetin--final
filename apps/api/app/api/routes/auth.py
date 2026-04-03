@@ -24,7 +24,7 @@ from app.schemas.auth import (
     PhoneVerifyResponse,
     PhoneTokenInfoResponse,
 )
-from app.services.phone import normalize_phone_kr_to_e164, phone_hmac_hash, phone_last4
+from app.services.phone import normalize_phone_domestic, normalize_phone_kr_to_e164, phone_hmac_hash, phone_last4
 from app.core.crypto import encrypt_phone
 import app.services.pass_auth as pass_auth
 
@@ -70,6 +70,15 @@ except ImportError:
 
 class FindEmailRequest(BaseModel):
     phone_token: str
+
+
+class FindUsernameSendOtpRequest(BaseModel):
+    phone: str
+
+
+class FindUsernameRequest(BaseModel):
+    phone: str
+    otp: str
 
 
 class SendEmailOtpRequest(BaseModel):
@@ -260,14 +269,47 @@ def logout(response: Response):
 
 # ─── 비밀번호 찾기 ────────────────────────────────────────────────
 
+@router.post("/find-username/send-otp")
+@_rate_limit("5/minute")
+async def find_username_send_otp(request: Request, payload: FindUsernameSendOtpRequest):
+    """아이디 찾기용 SMS OTP 발송."""
+    import app.services.sms_otp as sms_otp
+    from app.services.phone import normalize_phone_domestic
+    from app.services.sms_otp import SendOtpResult
+
+    try:
+        phone = normalize_phone_domestic(payload.phone)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    result = await sms_otp.send_otp(phone)
+    if result == SendOtpResult.COOLDOWN:
+        raise HTTPException(status_code=429, detail="잠시 후 다시 요청해주세요. (60초 후 재발송 가능)")
+    if result == SendOtpResult.SEND_FAILED:
+        raise HTTPException(status_code=500, detail="SMS 발송에 실패했습니다. 잠시 후 다시 시도해주세요.")
+    return {"status": "sent"}
+
+
 @router.post("/find-username")
 @_rate_limit("5/minute")
-async def find_username(request: Request, payload: FindEmailRequest, db: Session = Depends(get_db)):
-    """휴대폰 본인인증 후 가입 아이디 찾기."""
-    e164 = await pass_auth.consume_phone_token(payload.phone_token)
-    if not e164:
-        raise HTTPException(status_code=400, detail="휴대폰 인증이 필요합니다.")
+async def find_username(request: Request, payload: FindUsernameRequest, db: Session = Depends(get_db)):
+    """SMS OTP 검증 후 가입 아이디 찾기."""
+    import app.services.sms_otp as sms_otp
+    from app.services.phone import normalize_phone_domestic
+    from app.services.sms_otp import verify_otp
 
+    try:
+        phone = normalize_phone_domestic(payload.phone)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    success, exceeded = await verify_otp(phone, payload.otp.strip())
+    if exceeded:
+        raise HTTPException(status_code=429, detail="인증 시도 횟수를 초과했습니다. 인증번호를 다시 받아주세요.")
+    if not success:
+        raise HTTPException(status_code=400, detail="인증번호가 올바르지 않거나 만료되었습니다.")
+
+    e164 = normalize_phone_kr_to_e164(phone)
     phash = phone_hmac_hash(e164)
     user = db.query(User).filter(User.phone_hash == phash).first()
 

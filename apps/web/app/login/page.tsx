@@ -1,14 +1,10 @@
 "use client";
 
-import { useState, useEffect, FormEvent } from "react";
+import { useState, useEffect, useRef, FormEvent } from "react";
 import Link from "next/link";
-import Script from "next/script";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { certifyPhone, findUsernameByToken, sendPasswordResetOtp, verifyEmailOtp, resetPasswordByEmail } from "@/lib/api";
-
-const IMP_CODE = process.env.NEXT_PUBLIC_IMP_CODE ?? "";
-const IMP_CERT_CHANNEL_KEY = process.env.NEXT_PUBLIC_IMP_CERT_CHANNEL_KEY ?? "";
+import { sendFindUsernameOtp, findUsernameByOtp, sendPasswordResetOtp, verifyEmailOtp, resetPasswordByEmail } from "@/lib/api";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -42,7 +38,6 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-5">
-      <Script src="https://cdn.iamport.kr/v1/iamport.js" strategy="afterInteractive" />
       <div className="w-full max-w-sm">
         <div className="mb-10 text-center">
           <h1 className="text-4xl font-black tracking-tight text-gray-900">
@@ -127,70 +122,89 @@ export default function LoginPage() {
 const inputCls =
   "w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-base text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all";
 
-// ─── 포트원 본인인증 공통 훅 ────────────────────────────────
-function useCertifyFlow() {
-  const [phoneToken, setPhoneToken] = useState<string | null>(null);
-  const [certLoading, setCertLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const certify = (): Promise<string | null> => {
-    return new Promise((resolve) => {
-      setError(null);
-      const IMP = (window as any).IMP;
-      if (!IMP) {
-        setError("본인인증 모듈을 불러오는 중입니다. 잠시 후 다시 시도해주세요.");
-        resolve(null);
-        return;
-      }
-      IMP.init(IMP_CODE || "imp_test");
-      setCertLoading(true);
-      IMP.certification(
-        {
-          channelKey: IMP_CERT_CHANNEL_KEY,
-          merchant_uid: `cert_${Date.now()}`,
-          popup: false,
-        },
-        async (rsp: any) => {
-          if (!rsp.success) {
-            setError(rsp.error_msg ?? "본인인증에 실패했습니다.");
-            setCertLoading(false);
-            resolve(null);
-            return;
-          }
-          try {
-            const { phone_token } = await certifyPhone(rsp.imp_uid);
-            setPhoneToken(phone_token);
-            resolve(phone_token);
-          } catch (err) {
-            setError(err instanceof Error ? err.message : "본인인증 처리 실패");
-            resolve(null);
-          } finally {
-            setCertLoading(false);
-          }
-        },
-      );
-    });
-  };
-
-  return { phoneToken, certLoading, error, setError, certify };
-}
-
 // ─── 아이디 찾기 모달 ─────────────────────────────────────
 
-function FindIdModal({ onClose }: { onClose: () => void }) {
-  const cert = useCertifyFlow();
-  const [result, setResult] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+const FIND_ID_COOLDOWN = 60;
 
-  const handleCertifyAndFind = async () => {
-    const token = await cert.certify();
-    if (!token) return;
+function formatPhone(raw: string): string {
+  const d = raw.replace(/\D/g, "").slice(0, 11);
+  if (d.length <= 3) return d;
+  if (d.length <= 7) return `${d.slice(0, 3)}-${d.slice(3)}`;
+  return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+}
+
+function FindIdModal({ onClose }: { onClose: () => void }) {
+  const [step, setStep] = useState<"phone" | "otp" | "result">("phone");
+  const [phone, setPhone] = useState("");
+  const [otp, setOtp] = useState("");
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, []);
+
+  const startCooldown = () => {
+    setCooldown(FIND_ID_COOLDOWN);
+    timerRef.current = setInterval(() => {
+      setCooldown((c) => {
+        if (c <= 1) { clearInterval(timerRef.current!); return 0; }
+        return c - 1;
+      });
+    }, 1000);
+  };
+
+  const handleSendOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
     setLoading(true);
     try {
-      const res = await findUsernameByToken(token);
-      setResult(res.masked_username ?? "가입된 계정을 찾을 수 없습니다.");
+      await sendFindUsernameOtp(phone);
+      startCooldown();
+      setOtp("");
+      setStep("otp");
     } catch (err) {
-      cert.setError(err instanceof Error ? err.message : "오류가 발생했습니다.");
+      setError(err instanceof Error ? err.message : "오류가 발생했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (cooldown > 0) return;
+    setError(null);
+    setLoading(true);
+    try {
+      await sendFindUsernameOtp(phone);
+      startCooldown();
+      setOtp("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "오류가 발생했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await findUsernameByOtp(phone, otp);
+      setResult(res.masked_username ?? "가입된 계정을 찾을 수 없습니다.");
+      setStep("result");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "오류가 발생했습니다.";
+      if (msg.includes("횟수를 초과")) {
+        setOtp("");
+        setStep("phone");
+      } else {
+        setOtp("");
+      }
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -198,26 +212,65 @@ function FindIdModal({ onClose }: { onClose: () => void }) {
 
   return (
     <ModalShell title="아이디 찾기" onClose={onClose}>
-      {!result ? (
-        <div className="space-y-4">
-          <p className="text-sm text-gray-500">가입 시 등록한 전화번호로 본인인증하면 아이디를 확인할 수 있습니다.</p>
-
-          {cert.error && (
-            <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">
-              {cert.error}
-            </div>
-          )}
-
-          <button
-            type="button"
-            onClick={handleCertifyAndFind}
-            disabled={cert.certLoading || loading}
-            className="w-full rounded-xl bg-gray-800 py-3 text-sm font-bold text-white hover:bg-gray-700 disabled:opacity-40 transition-all"
-          >
-            {cert.certLoading || loading ? "처리 중..." : "휴대폰 본인인증으로 찾기"}
+      {step === "phone" && (
+        <form onSubmit={handleSendOtp} className="space-y-4">
+          <p className="text-sm text-gray-500">가입 시 등록한 휴대폰 번호로 인증번호를 받아주세요.</p>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">휴대폰 번호</label>
+            <input
+              type="tel"
+              inputMode="numeric"
+              placeholder="010-1234-5678"
+              value={formatPhone(phone)}
+              onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 11))}
+              required
+              className={inputCls}
+            />
+          </div>
+          {error && <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">{error}</div>}
+          <button type="submit" disabled={loading || phone.length < 10}
+            className="w-full rounded-xl bg-gray-800 py-3 text-sm font-bold text-white hover:bg-gray-700 disabled:opacity-40 transition-all">
+            {loading ? "발송 중..." : "인증번호 받기"}
           </button>
-        </div>
-      ) : (
+        </form>
+      )}
+
+      {step === "otp" && (
+        <form onSubmit={handleVerify} className="space-y-4">
+          <p className="text-sm text-gray-500">
+            <span className="font-semibold text-gray-800">{formatPhone(phone)}</span>으로 발송된<br />
+            6자리 인증번호를 입력해주세요.
+          </p>
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder="000000"
+            maxLength={6}
+            value={otp}
+            onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            autoFocus
+            required
+            className={`${inputCls} text-center text-lg tracking-[0.4em] font-bold`}
+          />
+          {error && <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">{error}</div>}
+          <div className="flex gap-3">
+            <button type="button" onClick={() => { setStep("phone"); setError(null); }}
+              className="flex-1 rounded-xl border border-gray-200 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-all">
+              이전
+            </button>
+            <button type="submit" disabled={loading || otp.length < 6}
+              className="flex-1 rounded-xl bg-gray-800 py-3 text-sm font-bold text-white hover:bg-gray-700 disabled:opacity-40 transition-all">
+              {loading ? "확인 중..." : "확인"}
+            </button>
+          </div>
+          <button type="button" onClick={handleResend} disabled={cooldown > 0 || loading}
+            className="w-full text-center text-xs text-gray-400 hover:text-blue-500 transition-colors disabled:opacity-40">
+            {cooldown > 0 ? `재발송 (${cooldown}초)` : "인증번호 재발송"}
+          </button>
+        </form>
+      )}
+
+      {step === "result" && (
         <div className="space-y-5">
           <div className="rounded-2xl border border-blue-100 bg-blue-50 px-5 py-4 text-center">
             <p className="text-xs text-blue-500 mb-1">가입된 아이디</p>
