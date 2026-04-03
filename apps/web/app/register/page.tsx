@@ -56,7 +56,7 @@ export default function RegisterPage() {
       {
         channelKey: IMP_CERT_CHANNEL_KEY,
         merchant_uid: `cert_${Date.now()}`,
-        popup: false,
+        popup: true,
       },
       async (rsp: any) => {
         if (!rsp.success) {

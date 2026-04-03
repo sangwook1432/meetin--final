@@ -59,7 +59,7 @@ export default function PrivacyPage() {
               <div>
                 <p className="font-semibold text-gray-800 mb-1">④ 결제 시</p>
                 <ul className="list-disc pl-5 space-y-1 text-gray-600">
-                  <li>결제 수단 정보 (토스페이먼츠를 통해 처리, 운영자 서버에 카드번호 미저장)</li>
+                  <li>결제 수단 정보 (KG이니시스를 통해 처리, 운영자 서버에 카드번호 미저장)</li>
                   <li>출금 계좌 정보 (지갑 잔액 환불 요청 시에만 수집: 은행명, 계좌번호, 예금주)</li>
                 </ul>
               </div>
@@ -75,7 +75,7 @@ export default function PrivacyPage() {
                 <ul className="list-disc pl-5 space-y-1 text-gray-600">
                   <li>서비스 이용 기록, 접속 로그</li>
                   <li>채팅 메시지 내용 — 서비스 제공 및 분쟁 대응을 위해 보관되며, 회원 탈퇴 시 또는 수집 목적 달성 후 지체 없이 삭제됩니다. 단, 관계 법령에 따라 보관이 필요한 경우 해당 기간 동안 보관될 수 있습니다.</li>
-                  <li>미팅 참여 및 평가 내역</li>
+                  <li>미팅 참여 내역</li>
                   <li>신고 내역</li>
                 </ul>
               </div>

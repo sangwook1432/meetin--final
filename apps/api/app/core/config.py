@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     # KG이니시스 MID (테스트: INIpayTest, 실서비스: 발급받은 MID)
     imp_mid: str = Field(default="INIpayTest", alias="IMP_MID")
 
+    # ─── SOLAPI (SMS) ────────────────────────────────────────────
+    solapi_api_key: str = Field(default="", alias="SOLAPI_API_KEY")
+    solapi_api_secret: str = Field(default="", alias="SOLAPI_API_SECRET")
+    solapi_from_number: str = Field(default="", alias="SOLAPI_FROM_NUMBER")
+
     # ─── 카카오 알림톡 ────────────────────────────────────────────
     kakao_api_key: str = Field(default="", alias="KAKAO_API_KEY")
     kakao_sender_key: str = Field(default="", alias="KAKAO_SENDER_KEY")

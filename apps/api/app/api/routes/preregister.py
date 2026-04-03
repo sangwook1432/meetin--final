@@ -1,10 +1,12 @@
 """
 preregister.py — 사전예약
 
-- POST /preregister        : 전화번호 + 성별 사전 등록 (공개)
-- GET  /admin/preregistrations : 사전예약 현황 조회 (관리자)
+- POST /preregister/send-otp  : SMS OTP 발송 (공개)
+- POST /preregister           : OTP 검증 + 사전예약 등록 (공개)
+- GET  /preregister/stats     : 사전예약 현황 (공개)
+- GET  /admin/preregistrations: 사전예약 현황 조회 (관리자)
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
@@ -13,8 +15,8 @@ from app.core.deps import get_db, require_admin
 from app.core.crypto import encrypt_phone, decrypt_phone
 from app.models.preregistration import Preregistration
 from app.models.user import Gender
-from app.services.phone import phone_hmac_hash
-import app.services.pass_auth as pass_auth
+from app.services.phone import normalize_phone_domestic, normalize_phone_kr_to_e164, phone_hmac_hash
+from app.services.sms_otp import SendOtpResult, send_otp, verify_otp
 
 router = APIRouter()
 
@@ -29,18 +31,59 @@ GENDER_QUOTA = {
 }
 
 
+class SendOtpIn(BaseModel):
+    phone: str  # 사용자 입력 (하이픈 포함 가능)
+
+
 class PreregisterIn(BaseModel):
-    phone_token: str
+    phone: str   # 사용자 입력 (하이픈 포함 가능)
+    otp: str     # 6자리 인증번호
     gender: Gender
 
 
+# ── OTP 발송 ─────────────────────────────────────────────────────────
+
+@router.post("/preregister/send-otp")
+async def preregister_send_otp(payload: SendOtpIn):
+    """사전예약용 SMS OTP 발송.
+
+    - 60초 재요청 제한
+    - SOLAPI 미설정 시 mock 모드 (OTP=000000, 발송 없음)
+    """
+    try:
+        phone = normalize_phone_domestic(payload.phone)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    result = await send_otp(phone)
+
+    if result == SendOtpResult.COOLDOWN:
+        raise HTTPException(429, "잠시 후 다시 요청해주세요. (60초 후 재발송 가능)")
+    if result == SendOtpResult.SEND_FAILED:
+        raise HTTPException(500, "SMS 발송에 실패했습니다. 잠시 후 다시 시도해주세요.")
+
+    return {"status": "sent"}
+
+
+# ── 사전예약 등록 ────────────────────────────────────────────────────
+
 @router.post("/preregister")
 async def preregister(payload: PreregisterIn, db: Session = Depends(get_db)):
-    """사전예약 등록. 휴대폰 인증 완료 후 발급된 phone_token 필요. 중복 등록 불가."""
-    e164 = await pass_auth.peek_phone_token(payload.phone_token)
-    if not e164:
-        raise HTTPException(400, "휴대폰 인증이 필요합니다. 다시 인증해주세요.")
+    """OTP 검증 후 사전예약 등록. 중복 등록 불가."""
+    try:
+        phone = normalize_phone_domestic(payload.phone)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
+    success, exceeded = await verify_otp(phone, payload.otp.strip())
+
+    if exceeded:
+        raise HTTPException(429, "인증 시도 횟수를 초과했습니다. 인증번호를 다시 받아주세요.")
+    if not success:
+        raise HTTPException(400, "인증번호가 올바르지 않거나 만료되었습니다.")
+
+    # E.164로 변환 후 해시 (회원가입 매칭 기준과 동일 포맷)
+    e164 = normalize_phone_kr_to_e164(phone)
     phash = phone_hmac_hash(e164)
 
     existing = db.execute(
@@ -60,9 +103,6 @@ async def preregister(payload: PreregisterIn, db: Session = Depends(get_db)):
         gender_label = "여자" if payload.gender == Gender.FEMALE else "남자"
         raise HTTPException(409, f"{gender_label} 사전예약 정원이 마감되었습니다.")
 
-    # 모든 검증 통과 후 토큰 소비
-    await pass_auth.consume_phone_token(payload.phone_token)
-
     db.add(Preregistration(
         phone_hash=phash,
         phone_encrypted=encrypt_phone(e164),
@@ -77,6 +117,8 @@ async def preregister(payload: PreregisterIn, db: Session = Depends(get_db)):
         "message": f"사전예약 완료! 앱 출시 시 매칭권 {tickets}개가 지급됩니다.",
     }
 
+
+# ── 통계 / 관리자 ────────────────────────────────────────────────────
 
 @router.get("/preregister/stats")
 def preregister_stats(db: Session = Depends(get_db)):
