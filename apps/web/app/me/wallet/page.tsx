@@ -392,7 +392,7 @@ export default function WalletPage() {
           <p className="text-gray-400">상호명: MEETIN. · 대표자: 전상욱</p>
           <p className="text-gray-400">사업자등록번호: 420-05-03754 (간이과세자)</p>
           <p className="text-gray-400">사업장주소: 경기도 고양시 일산서구 대산로 106, 109동 1401호 (주엽동, 강선마을)</p>
-          <p className="text-gray-400">통신판매업신고번호: 신고 진행 중</p>
+          <p className="text-gray-400">통신판매업신고번호: 2026-고양일산서-0435</p>
           <p className="text-gray-400">유선번호: 010-4544-7834</p>
           <p className="text-gray-400">이메일: adamjeon2003@gmail.com</p>
         </div>

@@ -32,7 +32,7 @@ export default function BizInfoPage() {
           <div className="h-px bg-gray-100" />
           <div className="flex flex-col gap-0.5">
             <span className="text-xs font-semibold text-gray-400">통신판매업신고번호</span>
-            <span>신고 진행 중</span>
+            <span>2026-고양일산서-0435</span>
           </div>
           <div className="h-px bg-gray-100" />
           <div className="flex flex-col gap-0.5">
@@ -45,10 +45,6 @@ export default function BizInfoPage() {
             <span>adamjeon2003@gmail.com</span>
           </div>
         </div>
-
-        <p className="mt-4 text-xs leading-relaxed text-gray-400">
-          본 서비스는 통신판매중개자로서 통신판매의 당사자가 아니며, 서비스 내 거래의 책임은 각 이용자에게 있습니다.
-        </p>
 
         <div className="mt-3 flex gap-3">
           <Link
