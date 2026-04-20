@@ -55,12 +55,6 @@ class ChargeIn(BaseModel):
     amount: int = Field(gt=0, le=500_000)
 
 
-class BankAccountIn(BaseModel):
-    bank_name: str
-    account_number: str
-    account_holder: str
-
-
 class WithdrawIn(BaseModel):
     amount: int = Field(gt=0, le=1_000_000)
 
@@ -278,42 +272,6 @@ def wallet_transactions(
     }
 
 
-# ─── 계좌 조회 ────────────────────────────────────────────────────
-
-@router.get("/me/bank-account")
-def get_bank_account(user=Depends(require_verified_financial)):
-    return {
-        "bank_name": user.bank_name,
-        "account_number": user.account_number,
-        "account_holder": user.account_holder,
-    }
-
-
-# ─── 계좌 등록/수정 ───────────────────────────────────────────────
-
-@router.patch("/me/bank-account")
-def update_bank_account(
-    payload: BankAccountIn,
-    db: Session = Depends(get_db),
-    user=Depends(require_verified_financial),
-):
-    if not payload.bank_name.strip():
-        raise HTTPException(400, "은행명을 입력해주세요.")
-    if not payload.account_number.strip():
-        raise HTTPException(400, "계좌번호를 입력해주세요.")
-    if not payload.account_holder.strip():
-        raise HTTPException(400, "예금주명을 입력해주세요.")
-
-    db_user = db.execute(
-        select(User).where(User.id == user.id)
-    ).scalar_one()
-    db_user.bank_name = payload.bank_name.strip()
-    db_user.account_number = payload.account_number.strip()
-    db_user.account_holder = payload.account_holder.strip()
-    db.commit()
-    return {"status": "updated"}
-
-
 # ─── 출금 신청 ────────────────────────────────────────────────────
 
 def _calc_withdraw_fee(amount: int, is_cheongyak: bool) -> tuple[int, int]:
@@ -416,9 +374,6 @@ def request_withdraw(
         select(User).where(User.id == user.id).with_for_update()
     ).scalar_one()
 
-    if not db_user.bank_name or not db_user.account_number:
-        raise HTTPException(400, "출금 계좌를 먼저 등록해주세요. (내 지갑 → 계좌 등록)")
-
     if db_user.balance < payload.amount:
         raise HTTPException(400, f"잔액이 부족합니다. 현재 잔액: {db_user.balance:,}원")
 
@@ -429,11 +384,7 @@ def request_withdraw(
         raise HTTPException(400, f"수수료({fee:,}원) 차감 후 실입금액({net:,}원)이 최소 기준(1,000원) 미만입니다.")
 
     refund_type = "청약철회" if is_ck else "일반환불"
-    note = (
-        f"[FEE:{fee}|NET:{net}] "
-        f"{db_user.bank_name} {db_user.account_number} ({db_user.account_holder}) "
-        f"출금신청 ({refund_type})"
-    )
+    note = f"[FEE:{fee}|NET:{net}] 출금신청 ({refund_type})"
 
     db_user.balance -= payload.amount
     _record_tx(
@@ -517,12 +468,15 @@ def list_withdrawals(
 # ─── 관리자: 출금 완료 처리 ───────────────────────────────────────
 
 @router.post("/admin/withdrawals/{tx_id}/complete")
-def complete_withdrawal(
+async def complete_withdrawal(
     tx_id: int,
     db: Session = Depends(get_db),
     admin=Depends(require_admin),
 ):
-    """관리자: 실제 이체 완료 후 WITHDRAW_DONE 내역 기록"""
+    """관리자: 출금 완료 처리.
+    imp_rest_api_key 설정 시 포트원 cancel API로 자동 환불.
+    미설정 시 수동 계좌이체 완료로 기록.
+    """
     tx = db.execute(
         select(WalletTransaction).where(
             WalletTransaction.id == tx_id,
@@ -533,16 +487,52 @@ def complete_withdrawal(
     if not tx:
         raise HTTPException(404, "출금 신청을 찾을 수 없습니다.")
 
-    # 이미 완료됐는지 확인 (같은 note로 WITHDRAW_DONE이 있으면 중복)
+    # 중복 처리 방지
     existing_done = db.execute(
         select(WalletTransaction).where(
             WalletTransaction.user_id == tx.user_id,
             WalletTransaction.tx_type == TxType.WITHDRAW_DONE,
-            WalletTransaction.note == f"tx#{tx_id} 출금 완료",
+            WalletTransaction.note.like(f"tx#{tx_id} 출금 완료%"),
         )
     ).scalar_one_or_none()
     if existing_done:
         return {"status": "already_completed"}
+
+    # note에서 수수료/실환불액 파싱
+    raw_amount = abs(tx.amount)
+    fee, net_amount = _parse_fee_net(tx.note, raw_amount)
+    is_cheongyak = "청약철회" in (tx.note or "")
+    reason = "청약철회 환불" if is_cheongyak else "일반환불 (수수료 10% 차감)"
+
+    if settings.imp_rest_api_key and net_amount > 0:
+        # pg_payment_uid 있는 CHARGE 건만 최신순으로 조회
+        charges = db.execute(
+            select(WalletTransaction)
+            .where(
+                WalletTransaction.user_id == tx.user_id,
+                WalletTransaction.tx_type == TxType.CHARGE,
+                WalletTransaction.pg_payment_uid.isnot(None),
+            )
+            .order_by(WalletTransaction.created_at.desc())
+        ).scalars().all()
+
+        if not charges:
+            raise HTTPException(400, "포트원 결제 내역이 없습니다. 수동 이체 후 처리하세요.")
+
+        from app.services.portone import cancel_across_charges, PortoneCancelError
+        try:
+            results = await cancel_across_charges(charges, net_amount, reason)
+            summary = ", ".join(f"{r['imp_uid']}:{r['cancelled']:,}원" for r in results)
+            done_note = f"tx#{tx_id} 출금 완료 (포트원 자동환불: {summary})"
+        except PortoneCancelError as e:
+            completed_info = e.completed
+            raise HTTPException(
+                502,
+                f"포트원 환불 실패: {e.message}"
+                + (f" | 완료된 건: {completed_info}" if completed_info else ""),
+            )
+    else:
+        done_note = f"tx#{tx_id} 출금 완료 (수동이체)"
 
     db_user = db.execute(
         select(User).where(User.id == tx.user_id)
@@ -555,10 +545,10 @@ def complete_withdrawal(
         tx_type=TxType.WITHDRAW_DONE,
         amount=0,
         balance_after=balance_now,
-        note=f"tx#{tx_id} 출금 완료",
+        note=done_note,
     )
     db.commit()
-    return {"status": "completed", "tx_id": tx_id}
+    return {"status": "completed", "tx_id": tx_id, "net_amount": net_amount}
 
 
 # ─── 관리자: 출금 반려 (잔액 복원) ───────────────────────────────

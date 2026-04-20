@@ -797,27 +797,6 @@ export async function confirmCharge(payload: {
   });
 }
 
-/** GET /me/bank-account — 계좌 조회 */
-export async function getBankAccount(): Promise<{
-  bank_name: string | null;
-  account_number: string | null;
-  account_holder: string | null;
-}> {
-  return apiFetch("/me/bank-account");
-}
-
-/** PATCH /me/bank-account — 계좌 등록/수정 */
-export async function updateBankAccount(payload: {
-  bank_name: string;
-  account_number: string;
-  account_holder: string;
-}): Promise<{ status: string }> {
-  return apiFetch("/me/bank-account", {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  });
-}
-
 /** POST /wallet/withdraw — 출금 신청 */
 export async function getWithdrawPreview(amount: number): Promise<{
   refund_type: "청약철회" | "일반환불";

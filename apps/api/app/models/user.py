@@ -78,11 +78,6 @@ class User(Base):
     # 매칭권 (개) — 잔액으로 구매, 채팅방 개설 시 소모
     matching_tickets: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
-    # 출금 계좌
-    bank_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    account_number: Mapped[str | None] = mapped_column(String(30), nullable=True)
-    account_holder: Mapped[str | None] = mapped_column(String(30), nullable=True)
-
     # 제재 시스템
     warning_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     suspended_until: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)

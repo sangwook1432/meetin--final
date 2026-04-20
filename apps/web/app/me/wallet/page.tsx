@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import Script from "next/script";
 import {
   getWallet, getWalletTransactions, prepareCharge, confirmCharge,
-  getBankAccount, updateBankAccount, requestWithdraw, getWithdrawPreview,
+  requestWithdraw, getWithdrawPreview,
 } from "@/lib/api";
 import { AppShell } from "@/components/ui/AppShell";
 
@@ -55,13 +55,6 @@ const TX_ICONS: Record<TxType, string> = {
 const CHARGE_OPTIONS = [10000, 20000, 30000, 50000];
 const WITHDRAW_OPTIONS = [10000, 30000, 50000, 100000];
 
-const BANKS = [
-  "카카오뱅크", "토스뱅크", "케이뱅크",
-  "국민은행", "신한은행", "우리은행", "하나은행",
-  "농협은행", "기업은행", "SC제일은행", "씨티은행",
-  "새마을금고", "신협", "우체국", "저축은행",
-];
-
 export default function WalletPage() {
   const router = useRouter();
 
@@ -78,14 +71,6 @@ export default function WalletPage() {
   const [chargeAmount, setChargeAmount] = useState(10000);
   const [showChargeModal, setShowChargeModal] = useState(false);
 
-  // 계좌
-  const [bankName, setBankName] = useState("");
-  const [accountNumber, setAccountNumber] = useState("");
-  const [accountHolder, setAccountHolder] = useState("");
-  const [savingAccount, setSavingAccount] = useState(false);
-  const [showAccountModal, setShowAccountModal] = useState(false);
-  const [hasAccount, setHasAccount] = useState(false);
-
   // 출금
   const [withdrawAmount, setWithdrawAmount] = useState(10000);
   const [withdrawing, setWithdrawing] = useState(false);
@@ -96,28 +81,21 @@ export default function WalletPage() {
   const [previewLoading, setPreviewLoading] = useState(false);
 
   useEffect(() => {
-    const anyOpen = showChargeModal || showAccountModal || showWithdrawModal;
+    const anyOpen = showChargeModal || showWithdrawModal;
     document.body.style.overflow = anyOpen ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
-  }, [showChargeModal, showAccountModal, showWithdrawModal]);
+  }, [showChargeModal, showWithdrawModal]);
 
   const loadData = async () => {
     try {
-      const [wallet, txData, account] = await Promise.all([
+      const [wallet, txData] = await Promise.all([
         getWallet(),
         getWalletTransactions(30),
-        getBankAccount(),
       ]);
       setBalance(wallet.balance);
       setMatchingTickets(wallet.matching_tickets);
       setCanAfford(wallet.can_afford);
       setTransactions(txData.transactions as Transaction[]);
-      if (account.bank_name) {
-        setBankName(account.bank_name);
-        setAccountNumber(account.account_number ?? "");
-        setAccountHolder(account.account_holder ?? "");
-        setHasAccount(true);
-      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "데이터 로드 실패");
     } finally {
@@ -161,7 +139,6 @@ export default function WalletPage() {
       const { orderId, orderName } = await prepareCharge(chargeAmount);
 
       if (IMP_CODE) {
-        // 포트원 결제창 실행
         const IMP = (window as any).IMP;
         IMP.init(IMP_CODE);
         IMP.request_pay(
@@ -206,23 +183,6 @@ export default function WalletPage() {
     }
   };
 
-  const handleSaveAccount = async () => {
-    if (!bankName || !accountNumber.trim() || !accountHolder.trim()) {
-      setError("모든 계좌 정보를 입력해주세요."); return;
-    }
-    setSavingAccount(true);
-    setError(null);
-    try {
-      await updateBankAccount({ bank_name: bankName, account_number: accountNumber.trim(), account_holder: accountHolder.trim() });
-      setHasAccount(true);
-      setShowAccountModal(false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "계좌 저장 실패");
-    } finally {
-      setSavingAccount(false);
-    }
-  };
-
   const fetchWithdrawPreview = async (amount: number) => {
     if (amount < 1000) { setWithdrawPreview(null); return; }
     setPreviewLoading(true);
@@ -234,7 +194,6 @@ export default function WalletPage() {
   };
 
   const handleWithdraw = async () => {
-    if (!hasAccount) { setError("출금 계좌를 먼저 등록해주세요."); return; }
     if (!withdrawPreview?.eligible) { setError("출금 불가 조건입니다."); return; }
     setWithdrawing(true);
     setError(null);
@@ -243,7 +202,7 @@ export default function WalletPage() {
       await loadData();
       setShowWithdrawModal(false);
       const netStr = res.net_amount.toLocaleString();
-      alert(`✅ 출금 신청이 완료되었습니다.\n실입금액 ${netStr}원이 1~2 영업일 내에 ${bankName} ${accountNumber}로 입금됩니다.`);
+      alert(`✅ 출금 신청이 완료되었습니다.\n실환불액 ${netStr}원이 원결제 수단으로 환불됩니다.`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "출금 신청 실패");
     } finally {
@@ -297,7 +256,6 @@ export default function WalletPage() {
             </button>
             <button
               onClick={() => {
-                if (!hasAccount) { setShowAccountModal(true); return; }
                 setShowWithdrawModal(true);
                 fetchWithdrawPreview(withdrawAmount);
               }}
@@ -312,28 +270,6 @@ export default function WalletPage() {
         {error && (
           <ErrorBanner message={error} />
         )}
-
-        {/* 계좌 정보 */}
-        <div className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-bold text-gray-800">출금 계좌</p>
-              {hasAccount ? (
-                <p className="mt-0.5 text-sm text-gray-500">
-                  {bankName} · {accountNumber} ({accountHolder})
-                </p>
-              ) : (
-                <p className="mt-0.5 text-xs text-gray-400">등록된 계좌가 없습니다</p>
-              )}
-            </div>
-            <button
-              onClick={() => setShowAccountModal(true)}
-              className="rounded-xl border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:border-blue-400 hover:text-blue-600 transition-all"
-            >
-              {hasAccount ? "수정" : "등록"}
-            </button>
-          </div>
-        </div>
 
         {/* 거래 내역 */}
         <div>
@@ -441,51 +377,6 @@ export default function WalletPage() {
         </div>
       )}
 
-      {/* 계좌 등록 모달 */}
-      {showAccountModal && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40">
-          <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-modal-safe">
-            <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-gray-900">출금 계좌 등록</h2>
-              <button onClick={() => setShowAccountModal(false)} className="flex h-11 w-11 items-center justify-center rounded-full text-gray-400 active:bg-gray-100 text-xl">✕</button>
-            </div>
-
-            <div className="space-y-4 mb-6">
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-gray-500">은행</label>
-                <select value={bankName} onChange={(e) => setBankName(e.target.value)}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-base text-gray-900 outline-none focus:border-blue-400"
-                >
-                  <option value="">은행 선택</option>
-                  {BANKS.map((b) => <option key={b} value={b}>{b}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-gray-500">계좌번호</label>
-                <input type="text" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)}
-                  placeholder="- 없이 숫자만 입력"
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-base text-gray-900 placeholder-gray-400 outline-none focus:border-blue-400"
-                />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-gray-500">예금주</label>
-                <input type="text" value={accountHolder} onChange={(e) => setAccountHolder(e.target.value)}
-                  placeholder="예금주 실명"
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-base text-gray-900 placeholder-gray-400 outline-none focus:border-blue-400"
-                />
-              </div>
-            </div>
-
-            {error && <p className="mb-3 text-xs text-red-500">{error}</p>}
-            <button onClick={handleSaveAccount} disabled={savingAccount}
-              className="w-full rounded-xl bg-blue-600 py-3.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50 transition-all"
-            >
-              {savingAccount ? "저장 중..." : "계좌 저장"}
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* 출금 신청 모달 */}
       {showWithdrawModal && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40">
@@ -493,13 +384,6 @@ export default function WalletPage() {
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-lg font-bold text-gray-900">잔액 출금</h2>
               <button onClick={() => setShowWithdrawModal(false)} className="flex h-11 w-11 items-center justify-center rounded-full text-gray-400 active:bg-gray-100 text-xl">✕</button>
-            </div>
-
-            <div className="mb-4 rounded-xl bg-gray-50 px-4 py-3">
-              <p className="text-xs text-gray-500">출금 계좌</p>
-              <p className="mt-0.5 text-sm font-semibold text-gray-800">
-                {bankName} {accountNumber} ({accountHolder})
-              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3 mb-4">
@@ -562,12 +446,12 @@ export default function WalletPage() {
                     <span>- {withdrawPreview.fee.toLocaleString()}원</span>
                   </div>
                   <div className="flex justify-between font-bold text-gray-900 border-t border-gray-200 pt-1.5 mt-1.5">
-                    <span>실제 입금액</span>
+                    <span>실제 환불액</span>
                     <span className="text-orange-600">{withdrawPreview.net_amount.toLocaleString()}원</span>
                   </div>
                 </div>
                 {!withdrawPreview.eligible && (
-                  <p className="mt-2 text-xs text-red-500">수수료 차감 후 입금액이 최소 기준 미만입니다.</p>
+                  <p className="mt-2 text-xs text-red-500">수수료 차감 후 환불액이 최소 기준 미만입니다.</p>
                 )}
               </div>
             ) : null}
@@ -578,7 +462,7 @@ export default function WalletPage() {
             >
               {withdrawing ? "처리 중..." : `${withdrawAmount.toLocaleString()}원 출금 신청`}
             </button>
-            <p className="mt-3 text-center text-xs text-gray-400">신청 후 1~2 영업일 내 입금됩니다</p>
+            <p className="mt-3 text-center text-xs text-gray-400">신청 후 관리자 확인을 거쳐 원결제 수단으로 환불됩니다</p>
           </div>
         </div>
       )}

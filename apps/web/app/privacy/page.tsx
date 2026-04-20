@@ -60,7 +60,6 @@ export default function PrivacyPage() {
                 <p className="font-semibold text-gray-800 mb-1">④ 결제 시</p>
                 <ul className="list-disc pl-5 space-y-1 text-gray-600">
                   <li>결제 수단 정보 (KG이니시스를 통해 처리, 운영자 서버에 카드번호 미저장)</li>
-                  <li>출금 계좌 정보 (지갑 잔액 환불 요청 시에만 수집: 은행명, 계좌번호, 예금주)</li>
                 </ul>
               </div>
               <div>
