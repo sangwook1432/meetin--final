@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, useEffect } from "react";
 import Link from "next/link";
 import Script from "next/script";
 import { useRouter } from "next/navigation";
@@ -42,6 +42,38 @@ export default function RegisterPage() {
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
+  // 모바일 redirect 복귀 처리
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const impUid = params.get("imp_uid");
+    const impSuccess = params.get("imp_success");
+
+    if (!impUid) return;
+
+    // URL 클린업 (뒤로가기 재처리 방지)
+    window.history.replaceState({}, "", "/register");
+
+    if (impSuccess === "false") {
+      setError(params.get("error_msg") ?? "본인인증에 실패했습니다.");
+      return;
+    }
+
+    setCertLoading(true);
+    certifyPhone(impUid)
+      .then(async ({ phone_token }) => {
+        setPhoneToken(phone_token);
+        setPhoneVerified(true);
+        const info = await getPhoneTokenInfo(phone_token);
+        if (info.name || info.age) {
+          setVerifiedInfo({ name: info.name, age: info.age, phone: info.phone });
+        }
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "본인인증 처리 실패");
+      })
+      .finally(() => setCertLoading(false));
+  }, []);
+
   // 포트원 본인인증
   const handleCertify = () => {
     setError(null);
@@ -57,6 +89,7 @@ export default function RegisterPage() {
         channelKey: IMP_CERT_CHANNEL_KEY,
         merchant_uid: `cert_${Date.now()}`,
         popup: true,
+        m_redirect_url: `${window.location.origin}/register`,
       },
       async (rsp: any) => {
         if (!rsp.success) {
