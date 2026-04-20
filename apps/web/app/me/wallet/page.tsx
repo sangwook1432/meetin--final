@@ -357,8 +357,9 @@ export default function WalletPage() {
               <label className="mb-1.5 block text-xs font-medium text-gray-500">직접 입력</label>
               <div className="flex items-center gap-2">
                 <input type="number" value={chargeAmount} onChange={(e) => setChargeAmount(Number(e.target.value))}
+                  onFocus={(e) => e.target.select()}
                   min={1000} max={500000} step={1000}
-                  className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-base outline-none focus:border-blue-400"
+                  className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-base text-gray-900 outline-none focus:border-blue-400"
                 />
                 <span className="text-sm text-gray-500">원</span>
               </div>
@@ -407,6 +408,7 @@ export default function WalletPage() {
                     setWithdrawAmount(v);
                     fetchWithdrawPreview(v);
                   }}
+                  onFocus={(e) => e.target.select()}
                   min={1000} max={1000000} step={1000}
                   className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-base text-gray-900 outline-none focus:border-orange-400"
                 />
