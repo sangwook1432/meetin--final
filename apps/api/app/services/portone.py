@@ -37,9 +37,9 @@ async def _cancel_single(imp_uid: str, amount: int, reason: str) -> None:
     access_token = await _get_portone_token()
     async with httpx.AsyncClient(timeout=15.0) as client:
         resp = await client.post(
-            f"https://api.iamport.kr/payments/{imp_uid}/cancel",
+            "https://api.iamport.kr/payments/cancel",
             headers={"Authorization": access_token},
-            json={"reason": reason, "amount": amount},
+            json={"imp_uid": imp_uid, "reason": reason, "amount": amount},
         )
     data = resp.json()
     if resp.status_code != 200 or data.get("code") != 0:
