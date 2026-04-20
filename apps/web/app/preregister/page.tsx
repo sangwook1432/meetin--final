@@ -363,7 +363,7 @@ export default function PreregisterPage() {
           <form onSubmit={handleSubmit} className="space-y-4 rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
             <div>
               <p className="mb-1 text-base font-bold text-white">성별 선택</p>
-              <p className="mb-4 text-xs text-white/40">혜택이 성별에 따라 달라져요</p>
+              <p className="mb-4 text-xs text-white/40">성별 오기입 시 회원가입 때 혜택 지급이 불가할 수 있어요</p>
               <div className="grid grid-cols-2 gap-2">
                 {(["FEMALE", "MALE"] as const).map((g) => {
                   const isFull = stats
