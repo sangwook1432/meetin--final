@@ -44,6 +44,22 @@ export default function RegisterPage() {
 
   // 모바일 redirect 복귀 처리
   useEffect(() => {
+    // redirect 복귀 시 폼 데이터 복원
+    const saved = sessionStorage.getItem("register_form_draft");
+    if (saved) {
+      try {
+        const draft = JSON.parse(saved) as {
+          form: typeof form;
+          agreedTerms: boolean;
+          agreedPrivacy: boolean;
+        };
+        setForm(draft.form);
+        setAgreedTerms(draft.agreedTerms);
+        setAgreedPrivacy(draft.agreedPrivacy);
+      } catch {}
+      sessionStorage.removeItem("register_form_draft");
+    }
+
     const params = new URLSearchParams(window.location.search);
     const impUid = params.get("imp_uid");
     const impSuccess = params.get("imp_success");
@@ -83,15 +99,24 @@ export default function RegisterPage() {
       return;
     }
     IMP.init(IMP_CODE || "imp_test");
+
+    // redirect 후 복귀 시 폼 유지를 위해 미리 저장
+    sessionStorage.setItem(
+      "register_form_draft",
+      JSON.stringify({ form, agreedTerms, agreedPrivacy }),
+    );
+
     setCertLoading(true);
     IMP.certification(
       {
         channelKey: IMP_CERT_CHANNEL_KEY,
         merchant_uid: `cert_${Date.now()}`,
-        popup: true,
+        // popup: false → WebView에서 팝업 차단 없이 redirect 방식으로 동작
         m_redirect_url: `${window.location.origin}/register`,
       },
       async (rsp: any) => {
+        // 웹 브라우저(popup 방식)에서 콜백으로 처리되는 경우
+        sessionStorage.removeItem("register_form_draft");
         if (!rsp.success) {
           setError(rsp.error_msg ?? "본인인증에 실패했습니다.");
           setCertLoading(false);

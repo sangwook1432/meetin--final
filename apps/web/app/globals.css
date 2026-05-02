@@ -1,35 +1,83 @@
 @import "tailwindcss";
 
+/* Pretendard 폰트는 layout.tsx의 <link>로 로드합니다 */
+
+/* ─── MEETIN V1 디자인 토큰 (Soft Trust) ──────────────────── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* 배경/표면 */
+  --bg: #FBF8F3;
+  --surface: #FFFFFF;
+  --surface-muted: #F4EFE7;
+  --border: #EAE2D5;
+  --border-strong: #DCCFB8;
+
+  /* 텍스트 */
+  --ink: #1B1813;
+  --ink-mid: #605649;
+  --ink-soft: #9A8E7A;
+  --ink-on-accent: #FFFFFF;
+
+  /* 액센트 — warm coral */
+  --accent: oklch(0.68 0.16 32);
+  --accent-soft: oklch(0.94 0.04 32);
+  --accent-ink: oklch(0.42 0.14 32);
+
+  /* 시맨틱 */
+  --male: oklch(0.62 0.14 250);
+  --male-soft: oklch(0.94 0.03 250);
+  --female: oklch(0.7 0.15 10);
+  --female-soft: oklch(0.95 0.04 10);
+  --success: oklch(0.62 0.14 155);
+  --success-soft: oklch(0.94 0.05 155);
+  --warning: oklch(0.78 0.14 85);
+  --warning-soft: oklch(0.96 0.05 85);
+  --danger: oklch(0.6 0.2 22);
+  --danger-soft: oklch(0.95 0.05 22);
+
+  /* 셰이프 */
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --radius-xl: 28px;
+
+  /* 그림자 */
+  --shadow-sm: 0 1px 2px rgba(60,40,20,0.04), 0 0 0 1px rgba(60,40,20,0.04);
+  --shadow-md: 0 2px 6px rgba(60,40,20,0.05), 0 8px 22px rgba(60,40,20,0.06);
+  --shadow-lg: 0 8px 30px rgba(60,40,20,0.10);
+
+  /* 폰트 */
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, system-ui, "Helvetica Neue", Helvetica, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  --background: var(--bg);
+  --foreground: var(--ink);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.01em;
   overscroll-behavior: none;
 }
 
 * {
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
+  box-sizing: border-box;
 }
+
+/* 스크롤바 숨김 유틸 */
+.no-scrollbar::-webkit-scrollbar { width: 0; height: 0; }
+.no-scrollbar { scrollbar-width: none; }
 
 /* iOS safe area 유틸리티 */
 @utility pb-safe {
@@ -39,3 +87,11 @@ body {
 @utility pb-modal-safe {
   padding-bottom: calc(2.5rem + env(safe-area-inset-bottom, 0px));
 }
+
+/* 애니메이션 */
+@keyframes meetin-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+@keyframes meetin-slide-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes meetin-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+.animate-slide-up { animation: meetin-slide-up 0.25s ease-out; }
+.animate-fade-in { animation: meetin-fade-in 0.2s ease-out; }

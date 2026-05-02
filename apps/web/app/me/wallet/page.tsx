@@ -1,14 +1,15 @@
 "use client";
-import ErrorBanner from "@/components/ui/ErrorBanner";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Script from "next/script";
+import ErrorBanner from "@/components/ui/ErrorBanner";
 import {
   getWallet, getWalletTransactions, prepareCharge, confirmCharge,
   requestWithdraw, getWithdrawPreview,
 } from "@/lib/api";
 import { AppShell } from "@/components/ui/AppShell";
+import { T, Icon, MoreNavBar, type IconName } from "@/components/me/MoreAtoms";
 
 const IMP_CODE = process.env.NEXT_PUBLIC_IMP_CODE ?? "";
 const IMP_PAY_CHANNEL_KEY = process.env.NEXT_PUBLIC_IMP_PAY_CHANNEL_KEY ?? "";
@@ -25,53 +26,40 @@ interface Transaction {
   created_at: string;
 }
 
-const TX_LABELS: Record<TxType, string> = {
-  CHARGE: "잔액 충전",
-  FORFEIT: "매칭권 몰수",
-  WITHDRAW: "출금 신청",
-  WITHDRAW_DONE: "출금 완료",
-  ADMIN_ADJUST: "관리자 조정",
-  TICKET_PURCHASE: "매칭권 구매",
-};
-
-const TX_COLORS: Record<TxType, string> = {
-  CHARGE: "text-emerald-600",
-  FORFEIT: "text-red-700",
-  WITHDRAW: "text-orange-500",
-  WITHDRAW_DONE: "text-orange-600",
-  ADMIN_ADJUST: "text-purple-500",
-  TICKET_PURCHASE: "text-indigo-500",
-};
-
-const TX_ICONS: Record<TxType, string> = {
-  CHARGE: "💳",
-  FORFEIT: "🚫",
-  WITHDRAW: "💸",
-  WITHDRAW_DONE: "✅",
-  ADMIN_ADJUST: "🛡️",
-  TICKET_PURCHASE: "🎟️",
+const TX_META: Record<TxType, { label: string; icon: IconName }> = {
+  CHARGE:          { label: "잔액 충전",  icon: "arrowDown" },
+  TICKET_PURCHASE: { label: "매칭권 구매", icon: "spark" },
+  FORFEIT:         { label: "매칭권 몰수", icon: "flag" },
+  WITHDRAW:        { label: "출금 신청",  icon: "arrowUp" },
+  WITHDRAW_DONE:   { label: "출금 완료",  icon: "check" },
+  ADMIN_ADJUST:    { label: "관리자 조정", icon: "shield" },
 };
 
 const CHARGE_OPTIONS = [10000, 20000, 30000, 50000];
 const WITHDRAW_OPTIONS = [10000, 30000, 50000, 100000];
 
+function formatDate(value: string) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString("ko-KR", {
+    month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+}
+
 export default function WalletPage() {
   const router = useRouter();
 
-  // 지갑
   const [balance, setBalance] = useState<number | null>(null);
   const [matchingTickets, setMatchingTickets] = useState(0);
-  const [canAfford, setCanAfford] = useState(false);
+  const [, setCanAfford] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 충전
   const [charging, setCharging] = useState(false);
   const [chargeAmount, setChargeAmount] = useState(10000);
   const [showChargeModal, setShowChargeModal] = useState(false);
 
-  // 출금
   const [withdrawAmount, setWithdrawAmount] = useState(10000);
   const [withdrawing, setWithdrawing] = useState(false);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
@@ -105,7 +93,7 @@ export default function WalletPage() {
 
   useEffect(() => { loadData(); }, []);
 
-  // 포트원 결제 리다이렉트 처리 (imp_uid, merchant_uid, imp_success 쿼리 파라미터)
+  // 포트원 결제 리다이렉트 처리
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const imp_uid = params.get("imp_uid");
@@ -139,7 +127,7 @@ export default function WalletPage() {
       const { orderId, orderName } = await prepareCharge(chargeAmount);
 
       if (IMP_CODE) {
-        const IMP = (window as any).IMP;
+        const IMP = (window as unknown as { IMP: { init: (k: string) => void; request_pay: (o: unknown, cb: (rsp: { success: boolean; error_msg?: string; imp_uid: string; merchant_uid: string }) => void) => void } }).IMP;
         IMP.init(IMP_CODE);
         IMP.request_pay(
           {
@@ -150,7 +138,7 @@ export default function WalletPage() {
             amount: chargeAmount,
             m_redirect_url: `${window.location.origin}/me/wallet?merchant_uid=${orderId}&amount=${chargeAmount}`,
           },
-          async (rsp: any) => {
+          async (rsp) => {
             if (!rsp.success) {
               setError(rsp.error_msg ?? "결제에 실패했습니다.");
               setCharging(false);
@@ -171,7 +159,7 @@ export default function WalletPage() {
         return;
       }
 
-      // Mock 모드 (IMP_CODE 없는 개발 환경)
+      // Mock 모드
       await confirmCharge({ imp_uid: "mock_imp_uid", merchant_uid: orderId, amount: chargeAmount });
       await loadData();
       setShowChargeModal(false);
@@ -213,8 +201,13 @@ export default function WalletPage() {
   if (loading) {
     return (
       <AppShell>
-        <div className="flex min-h-[60vh] items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600" />
+        <div style={{ background: T.bg, minHeight: "100%", fontFamily: T.fontSans }}>
+          <MoreNavBar title="지갑" fallbackHref="/me" />
+          <div style={{ display: "flex", justifyContent: "center", padding: "60px 0" }}>
+            <div className="h-8 w-8 animate-spin rounded-full" style={{
+              border: `4px solid ${T.surfaceMuted}`, borderTopColor: T.accent,
+            }} />
+          </div>
         </div>
       </AppShell>
     );
@@ -225,184 +218,416 @@ export default function WalletPage() {
       {IMP_CODE && (
         <Script src="https://cdn.iamport.kr/v1/iamport.js" strategy="afterInteractive" />
       )}
-      <div className="mx-auto max-w-md px-4 py-6 space-y-5">
+      <div style={{ background: T.bg, minHeight: "100%", fontFamily: T.fontSans, paddingBottom: 40 }}>
+        <MoreNavBar title="지갑" fallbackHref="/me" />
 
         {/* 잔액 카드 */}
-        <div className="rounded-3xl bg-gradient-to-br from-blue-600 to-blue-800 p-6 text-white shadow-xl">
-          <p className="text-sm font-medium text-blue-200">현재 잔액</p>
-          <p className="mt-1 text-4xl font-black tracking-tight">
-            {balance?.toLocaleString() ?? "—"}
-            <span className="ml-1 text-lg font-semibold text-blue-200">원</span>
-          </p>
-
-          <div className="mt-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs text-blue-200">매칭권</p>
-              <p className="text-sm font-bold text-white">{matchingTickets}개</p>
+        <div style={{ padding: "16px 16px 0" }}>
+          <div style={{
+            background: T.ink, color: "#FFF",
+            borderRadius: T.radiusXl, padding: "20px 20px 18px",
+            position: "relative", overflow: "hidden",
+          }}>
+            <div style={{
+              display: "flex", justifyContent: "space-between", alignItems: "flex-start",
+            }}>
+              <div>
+                <div style={{
+                  fontSize: 11, fontWeight: 700, letterSpacing: "0.10em",
+                  color: "rgba(255,255,255,0.55)",
+                }}>
+                  현재 잔액
+                </div>
+                <div style={{
+                  marginTop: 6, display: "flex", alignItems: "baseline", gap: 4,
+                }}>
+                  <span style={{
+                    fontSize: 32, fontWeight: 800, letterSpacing: "-0.03em",
+                  }}>{balance?.toLocaleString() ?? "—"}</span>
+                  <span style={{
+                    fontSize: 14, color: "rgba(255,255,255,0.6)", fontWeight: 600,
+                  }}>원</span>
+                </div>
+              </div>
+              <div style={{
+                fontSize: 11, color: "rgba(255,255,255,0.5)",
+                fontFamily: T.fontMono, letterSpacing: "0.10em",
+              }}>
+                MEETIN.WALLET
+              </div>
             </div>
-            <div className={`rounded-full px-3 py-1 text-xs font-bold ${
-              canAfford ? "bg-emerald-500/30 text-emerald-200" : "bg-red-500/30 text-red-200"
-            }`}>
-              {canAfford ? "✓ 매칭권 보유 중" : "⚠ 매칭권 없음"}
-            </div>
-          </div>
 
-          <div className="mt-5 grid grid-cols-2 gap-3">
-            <button
-              onClick={() => setShowChargeModal(true)}
-              className="rounded-2xl bg-white/20 py-3 text-sm font-bold text-white hover:bg-white/30 active:scale-95 transition-all"
-            >
-              + 잔액 충전
-            </button>
-            <button
-              onClick={() => {
-                setShowWithdrawModal(true);
-                fetchWithdrawPreview(withdrawAmount);
-              }}
-              className="rounded-2xl bg-white/10 border border-white/30 py-3 text-sm font-bold text-white hover:bg-white/20 active:scale-95 transition-all"
-            >
-              잔액 출금
-            </button>
-          </div>
-        </div>
-
-        {/* 에러 */}
-        {error && (
-          <ErrorBanner message={error} />
-        )}
-
-        {/* 거래 내역 */}
-        <div>
-          <h3 className="mb-3 text-base font-bold text-gray-900">거래 내역</h3>
-          {transactions.length === 0 ? (
-            <div className="rounded-2xl bg-white border border-gray-100 p-8 text-center shadow-sm">
-              <p className="text-sm text-gray-400">거래 내역이 없습니다</p>
-            </div>
-          ) : (
-            <div className="rounded-2xl bg-white border border-gray-100 shadow-sm overflow-hidden">
-              {transactions.map((tx, idx) => (
-                <div
-                  key={tx.id}
-                  className={`flex items-center gap-4 px-4 py-4 ${
-                    idx < transactions.length - 1 ? "border-b border-gray-50" : ""
-                  }`}
-                >
-                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-gray-100 text-lg">
-                    {TX_ICONS[tx.tx_type]}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-800">{TX_LABELS[tx.tx_type]}</p>
-                    {tx.note && (
-                      <p className="mt-0.5 truncate text-xs text-gray-400">{tx.note}</p>
-                    )}
-                    <p className="mt-0.5 text-xs text-gray-300">
-                      {new Date(tx.created_at).toLocaleString("ko-KR", {
-                        month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
-                      })}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className={`text-sm font-bold ${TX_COLORS[tx.tx_type]}`}>
-                      {tx.amount > 0 ? `+${tx.amount.toLocaleString()}` : tx.amount === 0 ? "—" : tx.amount.toLocaleString()}원
-                    </p>
-                    <p className="mt-0.5 text-xs text-gray-400">{tx.balance_after.toLocaleString()}원</p>
+            <div style={{
+              marginTop: 16, padding: "10px 12px",
+              background: "rgba(255,255,255,0.10)", borderRadius: T.radiusMd,
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{
+                  width: 26, height: 26, borderRadius: 999,
+                  background: T.accent,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  <Icon name="spark" size={14} stroke="#FFF" />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>매칭권</div>
+                  <div style={{ fontSize: 14, fontWeight: 800, marginTop: -1 }}>
+                    {matchingTickets}장 보유 중
                   </div>
                 </div>
-              ))}
+              </div>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>
+                = {(matchingTickets * 10000).toLocaleString()}원
+              </div>
             </div>
-          )}
+
+            <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+              <button
+                onClick={() => setShowChargeModal(true)}
+                style={{
+                  flex: 1, padding: 11, borderRadius: T.radiusMd,
+                  background: "#FFF", color: T.ink, border: 0,
+                  fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                  display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5,
+                }}
+              >
+                <Icon name="plus" size={14} stroke={T.ink} />
+                충전
+              </button>
+              <button
+                onClick={() => {
+                  setShowWithdrawModal(true);
+                  fetchWithdrawPreview(withdrawAmount);
+                }}
+                style={{
+                  flex: 1, padding: 11, borderRadius: T.radiusMd,
+                  background: "rgba(255,255,255,0.10)", color: "#FFF",
+                  border: "1px solid rgba(255,255,255,0.20)",
+                  fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                  display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5,
+                }}
+              >
+                <Icon name="arrowUp" size={14} stroke="#FFF" />
+                출금
+              </button>
+            </div>
+          </div>
         </div>
 
-        {/* 서비스 상세 설명 + 사업자 정보 */}
-        <div className="rounded-2xl border border-gray-100 bg-white px-4 py-4 text-xs text-gray-500 space-y-1.5">
-          <p className="font-semibold text-gray-700 mb-2">서비스 상세 설명</p>
-          <p>MEETIN.은 대학생 미팅 주선 디지털 서비스입니다.</p>
-          <p>· <span className="font-medium text-gray-700">잔액 충전</span>: 앱 내 전자지갑에 충전하는 선불 충전금 (1,000원 단위, 최대 500,000원)</p>
-          <p>· <span className="font-medium text-gray-700">매칭권</span>: 미팅 참가 신청에 필요한 디지털 이용권 (잔액으로 구매)</p>
-          <p>· 결제 후 미팅 매칭이 확정된 시점부터 서비스가 제공됩니다.</p>
-          <p>· 미사용 잔액은 환불 정책에 따라 출금 신청이 가능합니다.</p>
+        {error && <div style={{ padding: "14px 16px 0" }}><ErrorBanner message={error} /></div>}
 
-          <div className="my-2 border-t border-gray-100" />
+        {/* 매칭권 구매 */}
+        <div style={{ padding: "20px 16px 0" }}>
+          <button
+            onClick={() => router.push("/me/tickets")}
+            style={{
+              width: "100%", padding: "14px 16px", borderRadius: T.radiusLg,
+              background: T.surface, border: `1px solid ${T.border}`,
+              cursor: "pointer", fontFamily: "inherit",
+              display: "flex", alignItems: "center", gap: 12,
+            }}
+          >
+            <div style={{
+              width: 36, height: 36, borderRadius: 10,
+              background: T.accentSoft, color: T.accentInk,
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <Icon name="spark" size={18} stroke={T.accentInk} />
+            </div>
+            <div style={{ flex: 1, textAlign: "left" }}>
+              <div style={{
+                fontSize: 13, fontWeight: 700, color: T.ink, letterSpacing: "-0.01em",
+              }}>
+                매칭권 구매
+              </div>
+              <div style={{ fontSize: 11, color: T.inkSoft, marginTop: 2 }}>
+                잔액으로 매칭권을 구매할 수 있어요
+              </div>
+            </div>
+            <Icon name="chevron" size={16} stroke={T.inkSoft} />
+          </button>
+        </div>
 
-          <p className="font-semibold text-gray-700 mb-1.5">사업자 정보</p>
-          <p className="text-gray-400">상호명: MEETIN. · 대표자: 전상욱</p>
-          <p className="text-gray-400">사업자등록번호: 420-05-03754 (간이과세자)</p>
-          <p className="text-gray-400">사업장주소: 경기도 고양시 일산서구 대산로 106, 109동 1401호 (주엽동, 강선마을)</p>
-          <p className="text-gray-400">통신판매업신고번호: 2026-고양일산서-0435</p>
-          <p className="text-gray-400">유선번호: 010-4544-7834</p>
-          <p className="text-gray-400">이메일: adamjeon2003@gmail.com</p>
+        {/* 거래 내역 */}
+        <div style={{ padding: "20px 16px 0" }}>
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8,
+          }}>
+            <div style={{
+              fontSize: 13, fontWeight: 800, color: T.ink, letterSpacing: "-0.01em",
+            }}>
+              거래 내역
+            </div>
+            {transactions.length > 0 && (
+              <span style={{
+                fontSize: 11, color: T.inkSoft, fontFamily: T.fontMono,
+              }}>
+                최근 {transactions.length}건
+              </span>
+            )}
+          </div>
+
+          {transactions.length === 0 ? (
+            <div style={{
+              background: T.surface, border: `1px solid ${T.border}`,
+              borderRadius: T.radiusLg, padding: "32px 20px", textAlign: "center",
+            }}>
+              <div style={{ fontSize: 13, color: T.inkSoft }}>거래 내역이 없어요</div>
+            </div>
+          ) : (
+            <div style={{
+              background: T.surface, border: `1px solid ${T.border}`,
+              borderRadius: T.radiusLg, overflow: "hidden",
+            }}>
+              {transactions.map((tx, idx) => {
+                const meta = TX_META[tx.tx_type] ?? { label: tx.tx_type, icon: "info" as IconName };
+                const positive = tx.amount > 0;
+                return (
+                  <div key={tx.id} style={{
+                    display: "flex", alignItems: "center", gap: 11, padding: "12px 14px",
+                    borderTop: idx === 0 ? "none" : `1px solid ${T.border}`,
+                  }}>
+                    <div style={{
+                      width: 34, height: 34, borderRadius: 10,
+                      background: T.surfaceMuted, color: T.ink, flexShrink: 0,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      <Icon name={meta.icon} size={15} stroke={T.ink} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontSize: 13, fontWeight: 700, color: T.ink, letterSpacing: "-0.01em",
+                      }}>
+                        {meta.label}
+                      </div>
+                      <div style={{
+                        fontSize: 11, color: T.inkSoft, marginTop: 1,
+                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                      }}>
+                        {tx.note ?? "—"} · {formatDate(tx.created_at)}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{
+                        fontSize: 13, fontWeight: 800,
+                        color: positive ? T.success : T.ink, letterSpacing: "-0.01em",
+                      }}>
+                        {positive ? "+" : ""}{tx.amount.toLocaleString()}
+                      </div>
+                      <div style={{
+                        fontSize: 10, color: T.inkSoft, marginTop: 1, fontFamily: T.fontMono,
+                      }}>
+                        {tx.balance_after.toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div style={{
+            marginTop: 14, padding: "12px 14px",
+            background: T.surfaceMuted, border: `1px solid ${T.border}`,
+            borderRadius: T.radiusMd,
+            fontSize: 11, color: T.inkSoft, lineHeight: 1.6,
+          }}>
+            <div style={{
+              fontWeight: 700, color: T.inkMid, marginBottom: 4, fontSize: 12,
+            }}>
+              이용 안내
+            </div>
+            잔액 충전은 1,000원 단위 · 최대 50만 원까지 가능해요. 미사용 잔액은 환불 정책에 따라 출금 신청이 가능합니다.
+          </div>
         </div>
       </div>
 
       {/* 충전 모달 */}
       {showChargeModal && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40">
-          <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-modal-safe">
-            <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-gray-900">잔액 충전</h2>
-              <button onClick={() => setShowChargeModal(false)} className="flex h-11 w-11 items-center justify-center rounded-full text-gray-400 active:bg-gray-100 text-xl">✕</button>
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 50,
+          display: "flex", alignItems: "flex-end", justifyContent: "center",
+          background: "rgba(0,0,0,0.4)",
+        }}>
+          <div className="animate-slide-up" style={{
+            width: "100%", maxWidth: 448,
+            background: T.surface,
+            borderTopLeftRadius: T.radiusXl, borderTopRightRadius: T.radiusXl,
+            padding: 22, paddingBottom: "calc(22px + env(safe-area-inset-bottom, 0px))",
+          }}>
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18,
+            }}>
+              <div style={{
+                fontSize: 16, fontWeight: 800, color: T.ink, letterSpacing: "-0.02em",
+              }}>
+                잔액 충전
+              </div>
+              <button
+                onClick={() => setShowChargeModal(false)}
+                aria-label="닫기"
+                style={{
+                  width: 36, height: 36, borderRadius: 999,
+                  background: "transparent", border: 0, cursor: "pointer",
+                  color: T.inkSoft, padding: 0,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}
+              >
+                <Icon name="x" size={18} />
+              </button>
             </div>
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              {CHARGE_OPTIONS.map((opt) => (
-                <button key={opt} onClick={() => setChargeAmount(opt)}
-                  className={`rounded-xl border-2 py-3 text-sm font-bold transition-all ${
-                    chargeAmount === opt ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-600 hover:border-gray-300"
-                  }`}
-                >
-                  {opt.toLocaleString()}원
-                </button>
-              ))}
+
+            <div style={{
+              display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14,
+            }}>
+              {CHARGE_OPTIONS.map((opt) => {
+                const active = chargeAmount === opt;
+                return (
+                  <button
+                    key={opt}
+                    onClick={() => setChargeAmount(opt)}
+                    style={{
+                      padding: "12px 0", borderRadius: T.radiusMd,
+                      background: active ? T.accentSoft : T.bg,
+                      border: `1.5px solid ${active ? T.accent : T.border}`,
+                      color: active ? T.accentInk : T.ink,
+                      fontSize: 13, fontWeight: 700, cursor: "pointer",
+                      fontFamily: "inherit", letterSpacing: "-0.01em",
+                    }}
+                  >
+                    {opt.toLocaleString()}원
+                  </button>
+                );
+              })}
             </div>
-            <div className="mb-5">
-              <label className="mb-1.5 block text-xs font-medium text-gray-500">직접 입력</label>
-              <div className="flex items-center gap-2">
-                <input type="number" value={chargeAmount} onChange={(e) => setChargeAmount(Number(e.target.value))}
+
+            <div style={{ marginBottom: 18 }}>
+              <div style={{
+                fontSize: 11, fontWeight: 600, color: T.inkSoft, marginBottom: 6,
+              }}>
+                직접 입력
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input
+                  type="number"
+                  value={chargeAmount}
+                  onChange={(e) => setChargeAmount(Number(e.target.value))}
                   onFocus={(e) => e.target.select()}
                   min={1000} max={500000} step={1000}
-                  className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-base text-gray-900 outline-none focus:border-blue-400"
+                  style={{
+                    flex: 1, padding: "12px 14px", borderRadius: T.radiusMd,
+                    border: `1px solid ${T.border}`, background: T.bg,
+                    fontSize: 14, color: T.ink, outline: "none", fontFamily: "inherit",
+                  }}
                 />
-                <span className="text-sm text-gray-500">원</span>
+                <span style={{ fontSize: 13, color: T.inkSoft }}>원</span>
               </div>
-              <p className="mt-1 text-xs text-gray-400">최소 1,000원 · 최대 500,000원</p>
+              <div style={{ marginTop: 6, fontSize: 11, color: T.inkSoft }}>
+                최소 1,000원 · 최대 500,000원
+              </div>
             </div>
-            {error && <p className="mb-3 text-xs text-red-500">{error}</p>}
-            <button onClick={handleCharge} disabled={charging}
-              className="w-full rounded-xl bg-blue-600 py-3.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50 transition-all"
+
+            {error && (
+              <div style={{
+                marginBottom: 12, fontSize: 12, color: "oklch(0.55 0.20 22)",
+              }}>
+                {error}
+              </div>
+            )}
+
+            <button
+              onClick={handleCharge}
+              disabled={charging}
+              style={{
+                width: "100%", padding: "14px 18px", borderRadius: T.radiusMd,
+                background: charging ? T.surfaceMuted : T.accent,
+                color: charging ? T.inkSoft : T.inkOnAccent,
+                border: 0, fontSize: 14, fontWeight: 700, letterSpacing: "-0.01em",
+                cursor: charging ? "default" : "pointer", fontFamily: "inherit",
+              }}
             >
               {charging ? "처리 중..." : `${chargeAmount.toLocaleString()}원 충전하기`}
             </button>
-            <p className="mt-3 text-center text-xs text-gray-400">
+
+            <div style={{
+              marginTop: 12, textAlign: "center", fontSize: 11, color: T.inkSoft,
+            }}>
               {IMP_CODE ? "KG이니시스 결제창으로 이동합니다" : "개발 환경 — 실제 결제 없이 바로 충전됩니다"}
-            </p>
+            </div>
           </div>
         </div>
       )}
 
-      {/* 출금 신청 모달 */}
+      {/* 출금 모달 */}
       {showWithdrawModal && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40">
-          <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-modal-safe">
-            <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-gray-900">잔액 출금</h2>
-              <button onClick={() => setShowWithdrawModal(false)} className="flex h-11 w-11 items-center justify-center rounded-full text-gray-400 active:bg-gray-100 text-xl">✕</button>
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 50,
+          display: "flex", alignItems: "flex-end", justifyContent: "center",
+          background: "rgba(0,0,0,0.4)",
+        }}>
+          <div className="animate-slide-up" style={{
+            width: "100%", maxWidth: 448,
+            background: T.surface,
+            borderTopLeftRadius: T.radiusXl, borderTopRightRadius: T.radiusXl,
+            padding: 22, paddingBottom: "calc(22px + env(safe-area-inset-bottom, 0px))",
+          }}>
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18,
+            }}>
+              <div style={{
+                fontSize: 16, fontWeight: 800, color: T.ink, letterSpacing: "-0.02em",
+              }}>
+                잔액 출금
+              </div>
+              <button
+                onClick={() => setShowWithdrawModal(false)}
+                aria-label="닫기"
+                style={{
+                  width: 36, height: 36, borderRadius: 999,
+                  background: "transparent", border: 0, cursor: "pointer",
+                  color: T.inkSoft, padding: 0,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}
+              >
+                <Icon name="x" size={18} />
+              </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              {WITHDRAW_OPTIONS.map((opt) => (
-                <button key={opt} onClick={() => { setWithdrawAmount(opt); fetchWithdrawPreview(opt); }}
-                  className={`rounded-xl border-2 py-3 text-sm font-bold transition-all ${
-                    withdrawAmount === opt ? "border-orange-500 bg-orange-50 text-orange-700" : "border-gray-200 text-gray-600 hover:border-gray-300"
-                  }`}
-                >
-                  {opt.toLocaleString()}원
-                </button>
-              ))}
+            <div style={{
+              display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14,
+            }}>
+              {WITHDRAW_OPTIONS.map((opt) => {
+                const active = withdrawAmount === opt;
+                return (
+                  <button
+                    key={opt}
+                    onClick={() => { setWithdrawAmount(opt); fetchWithdrawPreview(opt); }}
+                    style={{
+                      padding: "12px 0", borderRadius: T.radiusMd,
+                      background: active ? T.accentSoft : T.bg,
+                      border: `1.5px solid ${active ? T.accent : T.border}`,
+                      color: active ? T.accentInk : T.ink,
+                      fontSize: 13, fontWeight: 700, cursor: "pointer",
+                      fontFamily: "inherit", letterSpacing: "-0.01em",
+                    }}
+                  >
+                    {opt.toLocaleString()}원
+                  </button>
+                );
+              })}
             </div>
 
-            <div className="mb-4">
-              <label className="mb-1.5 block text-xs font-medium text-gray-500">직접 입력</label>
-              <div className="flex items-center gap-2">
-                <input type="number" value={withdrawAmount}
+            <div style={{ marginBottom: 14 }}>
+              <div style={{
+                fontSize: 11, fontWeight: 600, color: T.inkSoft, marginBottom: 6,
+              }}>
+                직접 입력
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input
+                  type="number"
+                  value={withdrawAmount}
                   onChange={(e) => {
                     const v = Number(e.target.value);
                     setWithdrawAmount(v);
@@ -410,61 +635,109 @@ export default function WalletPage() {
                   }}
                   onFocus={(e) => e.target.select()}
                   min={1000} max={1000000} step={1000}
-                  className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-base text-gray-900 outline-none focus:border-orange-400"
+                  style={{
+                    flex: 1, padding: "12px 14px", borderRadius: T.radiusMd,
+                    border: `1px solid ${T.border}`, background: T.bg,
+                    fontSize: 14, color: T.ink, outline: "none", fontFamily: "inherit",
+                  }}
                 />
-                <span className="text-sm text-gray-500">원</span>
+                <span style={{ fontSize: 13, color: T.inkSoft }}>원</span>
               </div>
-              <p className="mt-1 text-xs text-gray-400">
+              <div style={{ marginTop: 6, fontSize: 11, color: T.inkSoft }}>
                 현재 잔액 {balance?.toLocaleString()}원
-              </p>
+              </div>
             </div>
 
             {/* 수수료 미리보기 */}
             {previewLoading ? (
-              <div className="mb-4 h-20 animate-pulse rounded-2xl bg-gray-100" />
+              <div style={{
+                marginBottom: 14, height: 90, borderRadius: T.radiusMd,
+                background: T.surfaceMuted,
+                animation: "meetin-pulse 1.4s ease-in-out infinite",
+              }} />
             ) : withdrawPreview ? (
-              <div className={`mb-4 rounded-2xl border px-4 py-3.5 ${
-                withdrawPreview.refund_type === "청약철회"
-                  ? "border-emerald-200 bg-emerald-50"
-                  : "border-orange-100 bg-orange-50"
-              }`}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-gray-500">환불 유형</span>
-                  <span className={`text-xs font-bold rounded-full px-2 py-0.5 ${
-                    withdrawPreview.refund_type === "청약철회"
-                      ? "bg-emerald-100 text-emerald-700"
-                      : "bg-orange-100 text-orange-700"
-                  }`}>
+              <div style={{
+                marginBottom: 14, padding: "12px 14px", borderRadius: T.radiusMd,
+                background: withdrawPreview.refund_type === "청약철회" ? T.successSoft : T.warningSoft,
+                border: `1px solid ${withdrawPreview.refund_type === "청약철회" ? T.success : T.warning}40`,
+              }}>
+                <div style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8,
+                }}>
+                  <span style={{
+                    fontSize: 11, fontWeight: 700, color: T.inkMid, letterSpacing: "0.05em",
+                  }}>
+                    환불 유형
+                  </span>
+                  <span style={{
+                    fontSize: 11, fontWeight: 800, padding: "3px 9px", borderRadius: 999,
+                    background: withdrawPreview.refund_type === "청약철회" ? T.success : T.warning,
+                    color: "#FFF",
+                  }}>
                     {withdrawPreview.refund_type}
                   </span>
                 </div>
-                <div className="space-y-1.5 text-sm">
-                  <div className="flex justify-between text-gray-600">
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12.5 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", color: T.inkMid }}>
                     <span>출금 신청액</span>
                     <span>{withdrawAmount.toLocaleString()}원</span>
                   </div>
-                  <div className="flex justify-between text-gray-500 text-xs">
+                  <div style={{
+                    display: "flex", justifyContent: "space-between",
+                    fontSize: 11, color: T.inkSoft,
+                  }}>
                     <span>수수료 ({withdrawPreview.refund_type === "청약철회" ? "없음" : "10%"})</span>
                     <span>- {withdrawPreview.fee.toLocaleString()}원</span>
                   </div>
-                  <div className="flex justify-between font-bold text-gray-900 border-t border-gray-200 pt-1.5 mt-1.5">
+                  <div style={{
+                    display: "flex", justifyContent: "space-between",
+                    fontWeight: 800, color: T.ink,
+                    borderTop: `1px solid ${T.border}`, paddingTop: 6, marginTop: 4,
+                  }}>
                     <span>실제 환불액</span>
-                    <span className="text-orange-600">{withdrawPreview.net_amount.toLocaleString()}원</span>
+                    <span style={{ color: T.accentInk }}>
+                      {withdrawPreview.net_amount.toLocaleString()}원
+                    </span>
                   </div>
                 </div>
                 {!withdrawPreview.eligible && (
-                  <p className="mt-2 text-xs text-red-500">수수료 차감 후 환불액이 최소 기준 미만입니다.</p>
+                  <div style={{
+                    marginTop: 8, fontSize: 11, color: "oklch(0.55 0.20 22)",
+                  }}>
+                    수수료 차감 후 환불액이 최소 기준 미만입니다.
+                  </div>
                 )}
               </div>
             ) : null}
 
-            {error && <p className="mb-3 text-xs text-red-500">{error}</p>}
-            <button onClick={handleWithdraw} disabled={withdrawing || !withdrawPreview?.eligible}
-              className="w-full rounded-xl bg-orange-500 py-3.5 text-sm font-bold text-white hover:bg-orange-600 disabled:opacity-50 transition-all"
+            {error && (
+              <div style={{
+                marginBottom: 12, fontSize: 12, color: "oklch(0.55 0.20 22)",
+              }}>
+                {error}
+              </div>
+            )}
+
+            <button
+              onClick={handleWithdraw}
+              disabled={withdrawing || !withdrawPreview?.eligible}
+              style={{
+                width: "100%", padding: "14px 18px", borderRadius: T.radiusMd,
+                background: withdrawing || !withdrawPreview?.eligible ? T.surfaceMuted : T.accent,
+                color: withdrawing || !withdrawPreview?.eligible ? T.inkSoft : T.inkOnAccent,
+                border: 0, fontSize: 14, fontWeight: 700, letterSpacing: "-0.01em",
+                cursor: withdrawing || !withdrawPreview?.eligible ? "default" : "pointer",
+                fontFamily: "inherit",
+              }}
             >
               {withdrawing ? "처리 중..." : `${withdrawAmount.toLocaleString()}원 출금 신청`}
             </button>
-            <p className="mt-3 text-center text-xs text-gray-400">신청 후 관리자 확인을 거쳐 원결제 수단으로 환불됩니다</p>
+
+            <div style={{
+              marginTop: 12, textAlign: "center", fontSize: 11, color: T.inkSoft,
+            }}>
+              신청 후 관리자 확인을 거쳐 원결제 수단으로 환불됩니다
+            </div>
           </div>
         </div>
       )}

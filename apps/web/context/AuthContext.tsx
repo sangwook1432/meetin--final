@@ -68,8 +68,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then(setUser)
       .catch((err) => {
         const msg = err instanceof Error ? err.message : "";
-        // "Session expired" = refresh 실패 → 이미 clearTokens 완료
-        // 그 외 네트워크 에러 등은 로그만 남기고 null 처리
         if (msg !== "Session expired") {
           console.warn("[AuthContext] getMe 실패:", msg);
         }
@@ -98,7 +96,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const me = await getMe();
       setUser(me);
     } catch {
-      // refresh 실패 시 로그아웃
       clearTokens();
       setUser(null);
       router.push("/login");

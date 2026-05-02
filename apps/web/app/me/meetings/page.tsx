@@ -1,5 +1,4 @@
 "use client";
-import ErrorBanner from "@/components/ui/ErrorBanner";
 
 /**
  * /me/meetings — 내가 참여한 미팅 목록
@@ -11,35 +10,22 @@ import ErrorBanner from "@/components/ui/ErrorBanner";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import ErrorBanner from "@/components/ui/ErrorBanner";
 import { getMyMeetings, type MyMeetingItem } from "@/lib/api";
 import { AppShell } from "@/components/ui/AppShell";
+import { T, Icon, Pill, type PillTone, MoreNavBar } from "@/components/me/MoreAtoms";
 
 const MEETING_TYPE_LABELS: Record<string, string> = {
-  TWO_BY_TWO: "2:2 미팅",
-  THREE_BY_THREE: "3:3 미팅",
+  TWO_BY_TWO: "2:2",
+  THREE_BY_THREE: "3:3",
 };
 
-const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
-  RECRUITING: {
-    label: "모집중",
-    className: "bg-blue-100 text-blue-700",
-  },
-  FULL: {
-    label: "정원 완료",
-    className: "bg-yellow-100 text-yellow-700",
-  },
-  WAITING_CONFIRM: {
-    label: "확정 대기",
-    className: "bg-orange-100 text-orange-700",
-  },
-  CONFIRMED: {
-    label: "확정됨",
-    className: "bg-emerald-100 text-emerald-700",
-  },
-  CANCELLED: {
-    label: "취소됨",
-    className: "bg-gray-100 text-gray-500",
-  },
+const STATUS_CONFIG: Record<string, { label: string; tone: PillTone }> = {
+  RECRUITING:      { label: "모집 중",   tone: "accent"  },
+  FULL:            { label: "정원 완료", tone: "warning" },
+  WAITING_CONFIRM: { label: "확정 대기", tone: "warning" },
+  CONFIRMED:       { label: "확정됨",   tone: "success" },
+  CANCELLED:       { label: "취소됨",   tone: "neutral" },
 };
 
 export default function MyMeetingsPage() {
@@ -55,86 +41,141 @@ export default function MyMeetingsPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) {
-    return (
-      <AppShell>
-        <div className="flex min-h-[60vh] items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600" />
-        </div>
-      </AppShell>
-    );
-  }
+  const counts = {
+    RECRUITING: meetings.filter((m) => m.status === "RECRUITING").length,
+    WAITING:    meetings.filter((m) => m.status === "WAITING_CONFIRM" || m.status === "FULL").length,
+    CONFIRMED:  meetings.filter((m) => m.status === "CONFIRMED").length,
+  };
 
   return (
     <AppShell>
-      <div className="mx-auto max-w-md px-4 py-6">
-        <h2 className="mb-5 text-lg font-bold text-gray-900">🤝 내 미팅</h2>
+      <div style={{ background: T.bg, minHeight: "100%", fontFamily: T.fontSans, paddingBottom: 40 }}>
+        <MoreNavBar title="내 미팅" fallbackHref="/me" />
 
-        {error && (
-          <div className="mb-4">
-            <ErrorBanner message={error} />
-          </div>
-        )}
+        <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+          {error && <ErrorBanner message={error} />}
 
-        {meetings.length === 0 ? (
-          <div className="rounded-2xl bg-white border border-gray-100 p-10 text-center shadow-sm">
-            <div className="text-4xl mb-3">🤝</div>
-            <p className="text-sm font-semibold text-gray-700">참여한 미팅이 없습니다</p>
-            <p className="mt-1.5 text-xs text-gray-400">
-              미팅에 참여하거나 직접 만들어보세요
-            </p>
-            <button
-              onClick={() => router.push("/discover")}
-              className="mt-5 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-blue-700 active:bg-blue-800 transition-all"
-            >
-              미팅 찾아보기 →
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {meetings.map((meeting) => {
-              const statusCfg = STATUS_CONFIG[meeting.status] ?? {
-                label: meeting.status,
-                className: "bg-gray-100 text-gray-500",
-              };
-              return (
-                <button
-                  key={meeting.meeting_id}
-                  onClick={() => router.push(`/meetings/${meeting.meeting_id}`)}
-                  className="w-full rounded-2xl bg-white border border-gray-100 p-4 text-left shadow-sm hover:border-blue-200 hover:shadow-md transition-all active:scale-[0.99]"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex flex-col gap-1.5">
-                      <p className="font-semibold text-gray-900 text-sm">
-                        {meeting.title ?? `미팅 #${meeting.meeting_id}`}
-                      </p>
-                      <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-bold text-blue-700 w-fit">
-                        {MEETING_TYPE_LABELS[meeting.meeting_type] ?? meeting.meeting_type}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold w-fit ${statusCfg.className}`}>
-                          {statusCfg.label}
-                        </span>
-                        {meeting.is_host && (
-                          <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-bold text-purple-700">
-                            👑 호스트
-                          </span>
-                        )}
+          {loading ? (
+            <div style={{ display: "flex", justifyContent: "center", padding: "60px 0" }}>
+              <div className="h-8 w-8 animate-spin rounded-full" style={{
+                border: `4px solid ${T.surfaceMuted}`, borderTopColor: T.accent,
+              }} />
+            </div>
+          ) : meetings.length === 0 ? (
+            <div style={{
+              background: T.surface, border: `1px solid ${T.border}`,
+              borderRadius: T.radiusLg, padding: "40px 22px", textAlign: "center",
+            }}>
+              <div style={{
+                width: 52, height: 52, margin: "0 auto", borderRadius: 999,
+                background: T.surfaceMuted, color: T.inkSoft,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <Icon name="users" size={24} />
+              </div>
+              <div style={{ marginTop: 12, fontSize: 14, fontWeight: 700, color: T.ink }}>
+                참여한 미팅이 없어요
+              </div>
+              <div style={{ marginTop: 4, fontSize: 12, color: T.inkSoft }}>
+                둘러보기에서 미팅을 찾거나 직접 만들어보세요
+              </div>
+              <button
+                onClick={() => router.push("/discover")}
+                style={{
+                  marginTop: 16, padding: "12px 18px", borderRadius: T.radiusMd,
+                  background: T.accent, color: T.inkOnAccent, border: 0,
+                  fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                }}
+              >
+                미팅 찾아보기 →
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* 상태 요약 */}
+              <div style={{
+                background: T.surface, border: `1px solid ${T.border}`,
+                borderRadius: T.radiusLg, padding: 14,
+                display: "grid", gridTemplateColumns: "1fr 1fr 1fr",
+              }}>
+                {[
+                  { label: "모집 중",   n: counts.RECRUITING },
+                  { label: "확정 대기", n: counts.WAITING },
+                  { label: "확정됨",   n: counts.CONFIRMED },
+                ].map((s, i) => (
+                  <div key={s.label} style={{
+                    textAlign: "center",
+                    borderLeft: i === 0 ? "none" : `1px solid ${T.border}`,
+                  }}>
+                    <div style={{
+                      fontSize: 22, fontWeight: 800, color: T.ink, letterSpacing: "-0.025em",
+                    }}>{s.n}</div>
+                    <div style={{ fontSize: 11, color: T.inkSoft, marginTop: 2 }}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {meetings.map((m) => {
+                const st = STATUS_CONFIG[m.status] ?? { label: m.status, tone: "neutral" as PillTone };
+                const typeLabel = MEETING_TYPE_LABELS[m.meeting_type] ?? m.meeting_type;
+                return (
+                  <button
+                    key={m.meeting_id}
+                    onClick={() => router.push(`/meetings/${m.meeting_id}`)}
+                    style={{
+                      background: T.surface, border: `1px solid ${T.border}`,
+                      borderRadius: T.radiusLg, padding: 14, textAlign: "left",
+                      cursor: "pointer", fontFamily: "inherit",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }}>
+                          <Pill tone={st.tone}>{st.label}</Pill>
+                          <Pill tone="neutral">{typeLabel}</Pill>
+                          {m.is_host && <Pill tone="accent">호스트</Pill>}
+                        </div>
+                        <div style={{
+                          marginTop: 8, fontSize: 14, fontWeight: 700,
+                          color: T.ink, letterSpacing: "-0.01em",
+                        }}>
+                          {m.title ?? `미팅 #${m.meeting_id}`}
+                        </div>
+                        <div style={{
+                          marginTop: 4, fontSize: 11, color: T.inkSoft, fontFamily: T.fontMono,
+                        }}>
+                          #{m.meeting_id}
+                        </div>
+                      </div>
+                      <div style={{ paddingTop: 2 }}>
+                        <Icon name="chevron" size={16} stroke={T.inkSoft} />
                       </div>
                     </div>
-                    <span className="text-gray-300 text-lg mt-1">›</span>
-                  </div>
 
-                  {meeting.chat_room_id && (
-                    <div className="mt-3 flex items-center gap-1.5">
-                      <span className="text-xs text-emerald-600">💬 채팅방 참여 중</span>
-                    </div>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
+                    {m.chat_room_id && (
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          router.push(`/chats/${m.chat_room_id}`);
+                        }}
+                        style={{
+                          marginTop: 12, padding: "10px 12px",
+                          background: T.successSoft, borderRadius: T.radiusMd,
+                          display: "flex", alignItems: "center", gap: 8,
+                          fontSize: 12, fontWeight: 700, color: T.success,
+                        }}
+                      >
+                        <Icon name="chat" size={14} />
+                        채팅방 입장 가능
+                        <Icon name="chevron" size={14} />
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </>
+          )}
+        </div>
       </div>
     </AppShell>
   );

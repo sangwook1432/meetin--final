@@ -41,6 +41,11 @@ class PreregisterIn(BaseModel):
     gender: Gender
 
 
+class LookupIn(BaseModel):
+    phone: str
+    otp: str
+
+
 # ── OTP 발송 ─────────────────────────────────────────────────────────
 
 @router.post("/preregister/send-otp")
@@ -58,8 +63,9 @@ async def preregister_send_otp(payload: SendOtpIn, db: Session = Depends(get_db)
 
     e164 = normalize_phone_kr_to_e164(phone)
     phash = phone_hmac_hash(e164)
-    if db.execute(select(Preregistration).where(Preregistration.phone_hash == phash)).scalar_one_or_none():
-        raise HTTPException(409, "이미 사전예약된 번호입니다.")
+    existing = db.execute(
+        select(Preregistration).where(Preregistration.phone_hash == phash)
+    ).scalar_one_or_none()
 
     result = await send_otp(phone)
 
@@ -68,7 +74,7 @@ async def preregister_send_otp(payload: SendOtpIn, db: Session = Depends(get_db)
     if result == SendOtpResult.SEND_FAILED:
         raise HTTPException(500, "SMS 발송에 실패했습니다. 잠시 후 다시 시도해주세요.")
 
-    return {"status": "sent"}
+    return {"status": "sent", "existing": existing is not None}
 
 
 # ── 사전예약 등록 ────────────────────────────────────────────────────
@@ -109,18 +115,71 @@ async def preregister(payload: PreregisterIn, db: Session = Depends(get_db)):
         gender_label = "여자" if payload.gender == Gender.FEMALE else "남자"
         raise HTTPException(409, f"{gender_label} 사전예약 정원이 마감되었습니다.")
 
-    db.add(Preregistration(
+    new_record = Preregistration(
         phone_hash=phash,
         phone_encrypted=encrypt_phone(e164),
         gender=payload.gender,
-    ))
+    )
+    db.add(new_record)
     db.commit()
+    db.refresh(new_record)
+
+    queue_num = db.execute(
+        select(func.count()).select_from(Preregistration).where(
+            Preregistration.id <= new_record.id
+        )
+    ).scalar_one()
 
     tickets = WELCOME_TICKETS[payload.gender]
     return {
         "status": "registered",
         "welcome_tickets": tickets,
+        "queue_num": queue_num,
+        "gender": payload.gender.value,
         "message": f"사전예약 완료! 앱 출시 시 매칭권 {tickets}개가 지급됩니다.",
+    }
+
+
+# ── 기존 사전예약 조회 (OTP 검증 후) ─────────────────────────────────
+
+@router.post("/preregister/lookup")
+async def preregister_lookup(payload: LookupIn, db: Session = Depends(get_db)):
+    """이미 사전예약된 번호의 신청 내역(매칭권/순번)을 조회.
+
+    OTP 인증으로 본인 확인 후에만 반환한다.
+    """
+    try:
+        phone = normalize_phone_domestic(payload.phone)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    success, exceeded = await verify_otp(phone, payload.otp.strip())
+
+    if exceeded:
+        raise HTTPException(429, "인증 시도 횟수를 초과했습니다. 인증번호를 다시 받아주세요.")
+    if not success:
+        raise HTTPException(400, "인증번호가 올바르지 않거나 만료되었습니다.")
+
+    e164 = normalize_phone_kr_to_e164(phone)
+    phash = phone_hmac_hash(e164)
+    record = db.execute(
+        select(Preregistration).where(Preregistration.phone_hash == phash)
+    ).scalar_one_or_none()
+    if not record:
+        raise HTTPException(404, "사전예약 내역이 없습니다.")
+
+    queue_num = db.execute(
+        select(func.count()).select_from(Preregistration).where(
+            Preregistration.id <= record.id
+        )
+    ).scalar_one()
+
+    tickets = WELCOME_TICKETS[record.gender]
+    return {
+        "status": "found",
+        "welcome_tickets": tickets,
+        "queue_num": queue_num,
+        "gender": record.gender.value,
     }
 
 

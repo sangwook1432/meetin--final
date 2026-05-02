@@ -1,10 +1,7 @@
 "use client";
 
 /**
- * /me/docs — 재학증명서 업로드 페이지
- *
- * JPG/PNG/PDF 파일을 직접 업로드하는 방식으로 변경.
- * 백엔드 /me/docs/upload (multipart/form-data) 호출.
+ * /me/docs — 재학 인증 (학생증 / 재학증명서 업로드)
  */
 
 import { Suspense, useState, useRef, useEffect } from "react";
@@ -13,11 +10,17 @@ import { useAuth } from "@/context/AuthContext";
 import { uploadDocFile } from "@/lib/api";
 import { AppShell } from "@/components/ui/AppShell";
 import type { DocType } from "@/types";
+import { T, Icon, MoreNavBar, PrimaryButton, SectionCard } from "@/components/me/MoreAtoms";
 
 const DOC_LABELS: Record<DocType, string> = {
   ENROLLMENT_CERT: "재학증명서",
   STUDENT_ID: "학생증",
 };
+
+const DOC_OPTIONS: { id: DocType; label: string; icon: "doc" | "card" }[] = [
+  { id: "ENROLLMENT_CERT", label: "재학증명서", icon: "doc" },
+  { id: "STUDENT_ID", label: "학생증", icon: "card" },
+];
 
 function DocsInner() {
   const { user, refreshUser } = useAuth();
@@ -32,14 +35,12 @@ function DocsInner() {
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 서류 제출 여부: localStorage 기반으로 페이지 이동 후에도 유지
   const docPendingKey = user ? `doc_pending_${user.id}` : null;
   const [docSubmitted, setDocSubmitted] = useState(() => {
     if (typeof window === "undefined" || !user) return false;
     return localStorage.getItem(`doc_pending_${user.id}`) === "1";
   });
 
-  // VERIFIED/REJECTED 확정 시 플래그 정리
   useEffect(() => {
     if (!docPendingKey) return;
     if (user?.verification_status === "VERIFIED" || user?.verification_status === "REJECTED") {
@@ -53,8 +54,6 @@ function DocsInner() {
     if (!f) return;
     setFile(f);
     setError(null);
-
-    // 이미지 미리보기
     if (f.type.startsWith("image/")) {
       const reader = new FileReader();
       reader.onload = (ev) => setPreview(ev.target?.result as string);
@@ -70,7 +69,6 @@ function DocsInner() {
       setError("파일을 선택해주세요");
       return;
     }
-
     setUploading(true);
     try {
       await uploadDocFile(docType, file);
@@ -86,154 +84,270 @@ function DocsInner() {
 
   if (!user) return null;
 
-  // ── VERIFIED 상태 ─────────────────────────────────────
+  // ── VERIFIED ─────────────────────────────
   if (user.verification_status === "VERIFIED") {
     if (docPendingKey) localStorage.removeItem(docPendingKey);
     return (
       <AppShell>
-        <div className="mx-auto max-w-md px-4 py-10">
-          <div className="rounded-2xl bg-emerald-50 border border-emerald-200 p-8 text-center">
-            <div className="text-5xl mb-4">✅</div>
-            <h2 className="text-lg font-bold text-emerald-800">인증 완료!</h2>
-            <p className="mt-2 text-sm text-emerald-600">
-              재학 인증이 완료되었습니다. 이제 미팅에 자유롭게 참가할 수 있습니다.
-            </p>
-            <button
-              onClick={() => router.push("/discover")}
-              className="mt-6 w-full rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white hover:bg-emerald-700 transition-all"
-            >
-              미팅 둘러보기 →
-            </button>
+        <div style={{ background: T.bg, minHeight: "100%", fontFamily: T.fontSans, paddingBottom: 40 }}>
+          <MoreNavBar title="재학 인증" fallbackHref="/me" />
+          <div style={{ padding: "24px 16px" }}>
+            <SectionCard padding={24} style={{
+              textAlign: "center", borderColor: T.success, background: T.successSoft,
+            }}>
+              <div style={{
+                width: 56, height: 56, margin: "0 auto", borderRadius: 999,
+                background: T.success, color: "#FFF",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <Icon name="check" size={28} stroke="#FFF" />
+              </div>
+              <div style={{
+                marginTop: 14, fontSize: 18, fontWeight: 800,
+                color: T.success, letterSpacing: "-0.02em",
+              }}>
+                인증 완료!
+              </div>
+              <div style={{
+                marginTop: 6, fontSize: 13, color: T.success, opacity: 0.9, lineHeight: 1.55,
+              }}>
+                재학 인증이 완료되었어요.
+                <br />이제 미팅에 자유롭게 참가할 수 있어요.
+              </div>
+              <button
+                onClick={() => router.push("/discover")}
+                style={{
+                  marginTop: 18, padding: "12px 20px", borderRadius: T.radiusMd,
+                  background: T.success, color: "#FFF", border: 0,
+                  fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                }}
+              >
+                미팅 둘러보기 →
+              </button>
+            </SectionCard>
           </div>
         </div>
       </AppShell>
     );
   }
 
-  // ── 업로드 완료(검토 대기) ──────────────────────────────
+  // ── 검토 중 ─────────────────────────────
   if (docSubmitted && user.verification_status !== "REJECTED") {
     return (
       <AppShell>
-        <div className="mx-auto max-w-md px-4 py-10">
-          <div className="rounded-2xl bg-yellow-50 border border-yellow-200 p-8 text-center">
-            <div className="text-5xl mb-4">⏳</div>
-            <h2 className="text-lg font-bold text-yellow-800">검토 중</h2>
-            <p className="mt-2 text-sm text-yellow-700">
-              서류를 제출했습니다. 관리자 검토 후 인증이 완료됩니다.
-              <br />보통 24시간 이내 처리됩니다.
-            </p>
-            <button
-              onClick={() => router.push("/discover")}
-              className="mt-6 w-full rounded-xl bg-yellow-500 py-3 text-sm font-bold text-white hover:bg-yellow-600 transition-all"
-            >
-              {isOnboarding ? "미팅 먼저 둘러보기 →" : "확인"}
-            </button>
-            <button
-              onClick={() => {
-                if (docPendingKey) localStorage.removeItem(docPendingKey);
-                setDocSubmitted(false);
-                setFile(null);
-                setPreview(null);
-                setError(null);
-              }}
-              className="mt-3 w-full rounded-xl border border-yellow-300 py-3 text-sm font-semibold text-yellow-700 hover:bg-yellow-100 transition-all"
-            >
-              잘못 올렸나요? 다시 제출하기
-            </button>
+        <div style={{ background: T.bg, minHeight: "100%", fontFamily: T.fontSans, paddingBottom: 40 }}>
+          <MoreNavBar title="재학 인증" fallbackHref="/me" />
+          <div style={{ padding: "24px 16px" }}>
+            <SectionCard padding={24} style={{
+              textAlign: "center", borderColor: T.warning, background: T.warningSoft,
+            }}>
+              <div style={{
+                width: 56, height: 56, margin: "0 auto", borderRadius: 999,
+                background: T.warning, color: "#FFF",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <Icon name="clock" size={28} stroke="#FFF" />
+              </div>
+              <div style={{
+                marginTop: 14, fontSize: 18, fontWeight: 800,
+                color: "oklch(0.45 0.13 70)", letterSpacing: "-0.02em",
+              }}>
+                검토 중
+              </div>
+              <div style={{
+                marginTop: 6, fontSize: 13, color: "oklch(0.50 0.10 70)", lineHeight: 1.55,
+              }}>
+                서류를 제출했어요.
+                <br />보통 24시간 이내 관리자 검토가 완료됩니다.
+              </div>
+              <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 8 }}>
+                <button
+                  onClick={() => router.push("/discover")}
+                  style={{
+                    padding: "12px 20px", borderRadius: T.radiusMd,
+                    background: T.warning, color: "#FFF", border: 0,
+                    fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                  }}
+                >
+                  {isOnboarding ? "미팅 먼저 둘러보기 →" : "확인"}
+                </button>
+                <button
+                  onClick={() => {
+                    if (docPendingKey) localStorage.removeItem(docPendingKey);
+                    setDocSubmitted(false);
+                    setFile(null);
+                    setPreview(null);
+                    setError(null);
+                  }}
+                  style={{
+                    padding: "10px 16px", borderRadius: T.radiusMd,
+                    background: "transparent",
+                    color: "oklch(0.50 0.10 70)",
+                    border: `1px solid oklch(0.78 0.10 70)`,
+                    fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+                  }}
+                >
+                  잘못 올렸나요? 다시 제출하기
+                </button>
+              </div>
+            </SectionCard>
           </div>
         </div>
       </AppShell>
     );
   }
 
-  // ── 업로드 폼 ─────────────────────────────────────────
+  // ── 업로드 폼 ──────────────────────────
   return (
     <AppShell>
-      <div className="mx-auto max-w-md px-4 py-6">
-        {isOnboarding && (
-          <div className="mb-6 rounded-2xl bg-blue-50 border border-blue-100 p-4">
-            <p className="font-semibold text-blue-800 text-sm">마지막 단계! 재학 인증 📄</p>
-            <p className="mt-1 text-xs text-blue-600">
-              재학증명서 또는 학생증을 업로드하면 미팅 참가가 가능합니다.
-            </p>
-            <div className="mt-3 flex gap-1 text-xs text-blue-500">
-              <span>✅ 1. 프로필 입력</span>
-              <span>→</span>
-              <span className="font-bold">2. 재학증명서 업로드</span>
-              <span>→</span>
-              <span>3. 미팅 참가</span>
+      <div style={{ background: T.bg, minHeight: "100%", fontFamily: T.fontSans, paddingBottom: 40 }}>
+        <MoreNavBar title="재학 인증" fallbackHref="/me" />
+
+        <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
+          {/* 진행 안내 */}
+          {isOnboarding && (
+            <div style={{
+              background: T.accentSoft, border: `1px solid ${T.accent}40`,
+              borderRadius: T.radiusLg, padding: "12px 14px",
+            }}>
+              <div style={{
+                fontSize: 12, fontWeight: 800, color: T.accentInk, letterSpacing: "-0.01em",
+              }}>
+                마지막 단계예요
+              </div>
+              <div style={{
+                marginTop: 3, fontSize: 11, color: T.accentInk, opacity: 0.85, lineHeight: 1.5,
+              }}>
+                학생증 또는 재학증명서를 업로드하면 미팅 참가가 가능해요.
+              </div>
+              <div style={{
+                marginTop: 8, display: "flex", alignItems: "center", gap: 5,
+                fontSize: 10, color: T.accentInk,
+              }}>
+                <span style={{ opacity: 0.55 }}>✓ 프로필</span>
+                <span style={{ opacity: 0.4 }}>→</span>
+                <span style={{ fontWeight: 800 }}>재학 인증</span>
+                <span style={{ opacity: 0.4 }}>→</span>
+                <span style={{ opacity: 0.4 }}>미팅</span>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {user.verification_status === "REJECTED" && (
-          <div className="mb-5 rounded-xl bg-red-50 border border-red-200 px-4 py-3">
-            <p className="text-sm font-semibold text-red-700">❌ 인증 거절됨</p>
-            <p className="mt-1 text-xs text-red-600">
-              서류를 다시 확인하고 재업로드해주세요.
-            </p>
-          </div>
-        )}
-
-        <h2 className="mb-5 text-lg font-bold text-gray-900">재학 인증</h2>
-
-        <div className="space-y-4">
-          {/* 서류 유형 선택 */}
-          <div className="rounded-2xl bg-white border border-gray-100 p-4 shadow-sm">
-            <p className="mb-3 text-sm font-semibold text-gray-700">서류 유형</p>
-            <div className="flex gap-3">
-              {(["ENROLLMENT_CERT", "STUDENT_ID"] as DocType[]).map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setDocType(t)}
-                  className={`flex-1 rounded-xl py-3 text-sm border-2 font-medium transition-all ${
-                    docType === t
-                      ? "border-blue-500 bg-blue-50 text-blue-700"
-                      : "border-gray-200 text-gray-500"
-                  }`}
-                >
-                  {t === "ENROLLMENT_CERT" ? "📄 재학증명서" : "🪪 학생증"}
-                </button>
-              ))}
+          {user.verification_status === "REJECTED" && (
+            <div style={{
+              background: "oklch(0.95 0.05 22)",
+              border: `1px solid oklch(0.85 0.10 22)`,
+              borderRadius: T.radiusMd, padding: "12px 14px",
+            }}>
+              <div style={{
+                fontSize: 12, fontWeight: 800, color: "oklch(0.50 0.18 22)",
+              }}>
+                인증이 거절되었어요
+              </div>
+              <div style={{
+                marginTop: 2, fontSize: 11, color: "oklch(0.55 0.15 22)", lineHeight: 1.5,
+              }}>
+                서류를 다시 확인하고 재업로드해주세요.
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* 파일 업로드 영역 */}
-          <div className="rounded-2xl bg-white border border-gray-100 p-4 shadow-sm">
-            <p className="mb-1 text-sm font-semibold text-gray-700">
-              {DOC_LABELS[docType]} 파일 선택
-            </p>
-            <p className="mb-3 text-xs text-gray-400">
-              JPG, PNG, PDF 형식 · 최대 10MB
-            </p>
+          {/* 서류 유형 */}
+          <SectionCard>
+            <div style={{
+              fontSize: 12, fontWeight: 700, color: T.ink,
+              marginBottom: 10, letterSpacing: "-0.01em",
+            }}>
+              서류 유형
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              {DOC_OPTIONS.map((opt) => {
+                const active = docType === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setDocType(opt.id)}
+                    style={{
+                      flex: 1, padding: "14px 10px", borderRadius: T.radiusMd,
+                      background: active ? T.accentSoft : T.bg,
+                      border: `1.5px solid ${active ? T.accent : T.border}`,
+                      cursor: "pointer", fontFamily: "inherit",
+                      display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
+                    }}
+                  >
+                    <Icon name={opt.icon} size={20} stroke={active ? T.accentInk : T.ink} />
+                    <div style={{
+                      fontSize: 12, fontWeight: 700,
+                      color: active ? T.accentInk : T.ink, letterSpacing: "-0.01em",
+                    }}>
+                      {opt.label}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </SectionCard>
 
-            {/* 드래그앤드롭/클릭 업로드 영역 */}
+          {/* 업로드 영역 */}
+          <SectionCard>
+            <div style={{
+              fontSize: 12, fontWeight: 700, color: T.ink, letterSpacing: "-0.01em",
+            }}>
+              {DOC_LABELS[docType]} 파일
+            </div>
+            <div style={{ marginTop: 2, fontSize: 11, color: T.inkSoft }}>
+              JPG · PNG · PDF · 최대 10MB
+            </div>
+
             <div
               onClick={() => fileInputRef.current?.click()}
-              className={`cursor-pointer rounded-xl border-2 border-dashed p-6 text-center transition-all hover:border-blue-400 hover:bg-blue-50 ${
-                file ? "border-blue-400 bg-blue-50" : "border-gray-200 bg-gray-50"
-              }`}
+              style={{
+                marginTop: 10, padding: preview ? 12 : "28px 16px",
+                border: `2px dashed ${file ? T.accent : T.borderStrong}`,
+                borderRadius: T.radiusMd,
+                background: file ? T.accentSoft : T.bg,
+                textAlign: "center", cursor: "pointer",
+              }}
             >
               {preview ? (
                 <img
                   src={preview}
                   alt="미리보기"
-                  className="mx-auto max-h-48 rounded-lg object-contain shadow-sm"
+                  style={{
+                    maxHeight: 200, maxWidth: "100%", borderRadius: T.radiusSm,
+                    margin: "0 auto", display: "block", objectFit: "contain",
+                  }}
                 />
               ) : (
-                <div className="flex flex-col items-center gap-2">
-                  <span className="text-3xl">📁</span>
-                  <p className="text-sm font-medium text-gray-600">
-                    {file ? file.name : "파일을 선택하거나 여기에 끌어다 놓으세요"}
-                  </p>
-                  <p className="text-xs text-gray-400">JPG · PNG · PDF</p>
-                </div>
+                <>
+                  <div style={{
+                    width: 44, height: 44, margin: "0 auto", borderRadius: 999,
+                    background: T.surfaceMuted, color: T.ink,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    <Icon name="plus" size={22} stroke={T.ink} />
+                  </div>
+                  <div style={{
+                    marginTop: 10, fontSize: 13, fontWeight: 700,
+                    color: T.ink, letterSpacing: "-0.01em",
+                  }}>
+                    {file ? file.name : "탭해서 파일 선택"}
+                  </div>
+                  {!file && (
+                    <div style={{ marginTop: 3, fontSize: 11, color: T.inkSoft }}>
+                      또는 여기에 끌어다 놓으세요
+                    </div>
+                  )}
+                </>
               )}
-              {file && !preview && (
-                <p className="mt-2 text-sm font-medium text-blue-700">
-                  📎 {file.name}
-                </p>
+              {file && preview && (
+                <div style={{
+                  marginTop: 8, fontSize: 12, fontWeight: 600,
+                  color: T.accentInk, wordBreak: "break-all",
+                }}>
+                  {file.name}
+                </div>
               )}
             </div>
 
@@ -242,45 +356,63 @@ function DocsInner() {
               type="file"
               accept=".jpg,.jpeg,.png,.pdf"
               onChange={handleFileChange}
-              className="hidden"
+              style={{ display: "none" }}
             />
 
             {file && (
               <button
-                onClick={() => { setFile(null); setPreview(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
-                className="mt-2 text-xs text-gray-400 hover:text-red-500 transition-colors"
+                onClick={() => {
+                  setFile(null);
+                  setPreview(null);
+                  if (fileInputRef.current) fileInputRef.current.value = "";
+                }}
+                style={{
+                  marginTop: 8, padding: "6px 0",
+                  background: "transparent", border: 0,
+                  fontSize: 11, color: T.inkSoft, cursor: "pointer", fontFamily: "inherit",
+                }}
               >
                 ✕ 파일 제거
               </button>
             )}
-          </div>
+          </SectionCard>
 
-          {/* 주의사항 */}
-          <div className="rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 text-xs text-gray-500 space-y-1">
-            <p className="font-semibold text-gray-600">📌 업로드 주의사항</p>
-            <p>• 개인정보(이름, 학번)가 포함된 서류를 업로드해주세요</p>
-            <p>• 이미지가 선명하게 보여야 합니다</p>
-            <p>• 개인정보는 인증 목적으로만 사용되며 안전하게 보관됩니다</p>
+          <div style={{
+            padding: "12px 14px",
+            background: T.surfaceMuted, borderRadius: T.radiusMd,
+            fontSize: 11, color: T.inkSoft, lineHeight: 1.7,
+          }}>
+            <div style={{
+              fontWeight: 700, color: T.inkMid, marginBottom: 4, fontSize: 12,
+            }}>
+              업로드 주의사항
+            </div>
+            • 이름과 학번이 선명하게 보이는 서류를 올려 주세요<br />
+            • 제출하신 정보는 인증 목적으로만 사용되며 안전하게 보관돼요
           </div>
 
           {error && (
-            <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">
+            <div style={{
+              padding: "10px 12px", borderRadius: T.radiusMd,
+              background: "oklch(0.95 0.05 22)",
+              color: "oklch(0.50 0.18 22)",
+              fontSize: 12.5, fontWeight: 600,
+            }}>
               {error}
             </div>
           )}
 
-          <button
-            onClick={handleUpload}
-            disabled={uploading || !file}
-            className="w-full rounded-xl bg-blue-600 py-3.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50 active:scale-95 transition-all"
-          >
+          <PrimaryButton onClick={handleUpload} disabled={uploading || !file}>
             {uploading ? "제출 중..." : "제출하기"}
-          </button>
+          </PrimaryButton>
 
           {isOnboarding && (
             <button
               onClick={() => router.push("/discover")}
-              className="w-full py-2 text-sm text-gray-400 hover:text-gray-600"
+              style={{
+                padding: "10px 0", background: "transparent", border: 0,
+                fontSize: 12, color: T.inkSoft, cursor: "pointer", fontFamily: "inherit",
+              }}
             >
               나중에 하기
             </button>
@@ -293,7 +425,14 @@ function DocsInner() {
 
 export default function DocsPage() {
   return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center text-sm text-gray-400">로딩 중...</div>}>
+    <Suspense fallback={
+      <div style={{
+        display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center",
+        fontSize: 13, color: T.inkSoft,
+      }}>
+        로딩 중...
+      </div>
+    }>
       <DocsInner />
     </Suspense>
   );

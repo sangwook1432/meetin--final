@@ -61,6 +61,8 @@ export default function ChatRoomPage() {
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [showVoteModal, setShowVoteModal] = useState(false);
   const [showTransferHostModal, setShowTransferHostModal] = useState(false);
+  const [showActionPanel, setShowActionPanel] = useState(false);
+  const [disabledReason, setDisabledReason] = useState<string | null>(null);
 
   const lastIdRef = useRef(0);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -261,86 +263,48 @@ export default function ChatRoomPage() {
   return (
     <AppShell noPadding noHeader noNav>
       {/* 헤더 */}
-      <div className="sticky top-0 z-20 flex items-center gap-2 border-b border-gray-100 bg-white px-4 py-3 shadow-sm">
+      <div
+        className="sticky top-0 z-20 flex items-center gap-2 px-3 py-3"
+        style={{
+          background: "var(--surface)",
+          borderBottom: "1px solid var(--border)",
+          boxShadow: "var(--shadow-sm)",
+        }}
+      >
         <button
           onClick={() => router.back()}
-          className="rounded-full p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+          className="flex items-center justify-center transition-colors"
+          style={{
+            width: 36, height: 36, borderRadius: 999,
+            color: "var(--ink)",
+          }}
+          aria-label="뒤로가기"
         >
-          ←
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
         </button>
         <div className="flex-1 min-w-0">
-          <h1 className="font-semibold text-gray-900 text-sm truncate">그룹 채팅방</h1>
-          <p className="text-xs text-gray-400 flex items-center gap-1">
-            <span className={`inline-block h-1.5 w-1.5 rounded-full ${wsConnected ? "bg-green-400" : "bg-gray-300"}`} />
+          <h1
+            className="font-bold truncate"
+            style={{ fontSize: 14, color: "var(--ink)", letterSpacing: "-0.02em" }}
+          >
+            {roomInfo?.meeting_title ?? "그룹 채팅방"}
+          </h1>
+          <p
+            className="flex items-center gap-1"
+            style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 1 }}
+          >
+            <span
+              className="inline-block"
+              style={{
+                width: 6, height: 6, borderRadius: 999,
+                background: wsConnected ? "var(--success)" : "var(--border-strong)",
+              }}
+            />
             {wsConnected ? "실시간 연결됨" : "연결 중..."}
           </p>
         </div>
-
-        {/* 일정 미확정 상태 버튼들 — 읽기전용이면 숨김 */}
-        {!isScheduleConfirmed && !isClosed && (
-          <>
-            {activeVoteCount > 0 && (
-              <button
-                onClick={() => setShowVoteModal(true)}
-                className="relative rounded-xl bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100 transition-colors whitespace-nowrap"
-              >
-                🗳️ 투표함
-                <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
-                  {activeVoteCount}
-                </span>
-              </button>
-            )}
-            {isHost && (
-              <button
-                onClick={() => setShowScheduleModal(true)}
-                className="rounded-xl bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-100 transition-colors whitespace-nowrap"
-              >
-                📅 일정 제안
-              </button>
-            )}
-            {isHost && (
-              <button
-                onClick={() => setShowTransferHostModal(true)}
-                className="rounded-xl bg-yellow-50 px-3 py-1.5 text-xs font-semibold text-yellow-600 hover:bg-yellow-100 transition-colors whitespace-nowrap"
-              >
-                👑 호스트 넘기기
-              </button>
-            )}
-            {!hasCancelVote && (
-              <button
-                onClick={handleCancelPropose}
-                className="rounded-xl bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-600 hover:bg-orange-100 transition-colors whitespace-nowrap"
-              >
-                ❌
-              </button>
-            )}
-          </>
-        )}
-
-        {/* 일정 확정 후 버튼들 — 읽기전용이면 숨김 */}
-        {isScheduleConfirmed && !isClosed && (
-          <>
-            {isHost && (
-              <button
-                onClick={() => setShowScheduleModal(true)}
-                className="rounded-xl bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-100 transition-colors whitespace-nowrap"
-              >
-                ✏️ 미팅 수정
-              </button>
-            )}
-            <button
-              onClick={hasCancelVote ? () => setShowVoteModal(true) : handleCancelPropose}
-              className="relative rounded-xl bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 transition-colors whitespace-nowrap"
-            >
-              🚫 미팅 취소
-              {hasCancelVote && (
-                <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
-                  !
-                </span>
-              )}
-            </button>
-          </>
-        )}
 
         {/* 나가기 버튼 */}
         <button
@@ -366,7 +330,10 @@ export default function ChatRoomPage() {
       )}
 
       {/* 메시지 목록 */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+      <div
+        className="flex-1 overflow-y-auto px-4 py-4 space-y-3"
+        style={{ background: "var(--bg)" }}
+      >
         {messages.length === 0 ? (
           <div className="flex h-full items-center justify-center">
             <p className="text-sm text-gray-400">첫 인사를 건네보세요! 👋</p>
@@ -404,32 +371,162 @@ export default function ChatRoomPage() {
 
       {/* 입력창 */}
       {isClosed ? (
-        <div className="sticky bottom-0 border-t border-gray-100 bg-gray-50 px-4 py-4 text-center text-sm text-gray-400">
+        <div
+          className="sticky bottom-0 px-4 py-4 text-center text-sm"
+          style={{
+            background: "var(--surface-muted)",
+            borderTop: "1px solid var(--border)",
+            color: "var(--ink-soft)",
+            paddingBottom: "calc(1rem + env(safe-area-inset-bottom, 0px))",
+          }}
+        >
           채팅이 종료되었습니다
         </div>
       ) : (
-        <div className="sticky bottom-0 border-t border-gray-100 bg-white px-4 py-3">
-          <div className="flex items-end gap-2">
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="메시지를 입력하세요..."
-              rows={1}
-              className="flex-1 resize-none rounded-2xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-base text-gray-900 placeholder-gray-400 outline-none focus:border-blue-400 focus:bg-white transition-all max-h-32 overflow-y-auto"
-              style={{ minHeight: "44px" }}
-            />
-            <button
-              onClick={handleSend}
-              disabled={!input.trim() || sending}
-              className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 active:scale-95 transition-all"
+        <div
+          className="sticky bottom-0"
+          style={{
+            background: "var(--surface)",
+            borderTop: "1px solid var(--border)",
+            paddingBottom: "env(safe-area-inset-bottom, 0px)",
+          }}
+        >
+          <div className="px-3 py-3">
+            <div className="flex items-end gap-2">
+              <button
+                onClick={() => {
+                  setShowActionPanel((prev) => {
+                    const next = !prev;
+                    if (next) textareaRef.current?.blur();
+                    return next;
+                  });
+                }}
+                className="flex items-center justify-center transition-all active:scale-95"
+                style={{
+                  width: 44, height: 44, borderRadius: 999,
+                  background: showActionPanel ? "var(--accent)" : "var(--surface-muted)",
+                  border: "1px solid var(--border)",
+                  color: showActionPanel ? "#fff" : "var(--ink-mid)",
+                  flexShrink: 0,
+                  position: "relative",
+                }}
+                aria-label={showActionPanel ? "기능 닫기" : "기능 열기"}
+              >
+                <svg
+                  width="20" height="20" viewBox="0 0 24 24" fill="none"
+                  style={{
+                    transition: "transform 0.2s ease",
+                    transform: showActionPanel ? "rotate(45deg)" : "rotate(0deg)",
+                  }}
+                >
+                  <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+                </svg>
+                {!showActionPanel && activeVoteCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                    {activeVoteCount}
+                  </span>
+                )}
+              </button>
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onFocus={() => setShowActionPanel(false)}
+                placeholder="메시지 입력"
+                rows={1}
+                className="flex-1 resize-none px-4 py-2.5 outline-none transition-all max-h-32 overflow-y-auto"
+                style={{
+                  minHeight: "44px",
+                  background: "var(--surface-muted)",
+                  border: "1px solid var(--border)",
+                  color: "var(--ink)",
+                  borderRadius: 999,
+                  fontSize: 14,
+                  fontFamily: "var(--font-sans)",
+                  letterSpacing: "-0.01em",
+                }}
+              />
+              <button
+                onClick={handleSend}
+                disabled={!input.trim() || sending}
+                className="flex items-center justify-center text-white disabled:opacity-40 transition-all active:scale-95"
+                style={{
+                  width: 44, height: 44, borderRadius: 999,
+                  background: input.trim() ? "var(--accent)" : "var(--border-strong)",
+                  flexShrink: 0,
+                }}
+              >
+                <SendIcon />
+              </button>
+            </div>
+            <p
+              className="mt-1 text-center"
+              style={{ fontSize: 10, color: "var(--ink-soft)" }}
             >
-              <SendIcon />
-            </button>
+              Enter 전송 · Shift+Enter 줄바꿈
+            </p>
           </div>
-          <p className="mt-1 text-center text-xs text-gray-300">Enter 전송 · Shift+Enter 줄바꿈</p>
+
+          {/* 액션 패널 */}
+          {showActionPanel && (
+            <div
+              className="px-4 py-4"
+              style={{
+                borderTop: "1px solid var(--border)",
+                background: "var(--surface-muted)",
+                minHeight: 180,
+              }}
+            >
+              <div className="grid grid-cols-4 gap-3">
+                <ActionTile
+                  icon="🗳️"
+                  label="투표함"
+                  tone="amber"
+                  badge={activeVoteCount > 0 ? activeVoteCount : undefined}
+                  disabled={activeVoteCount === 0}
+                  onClick={() => { setShowActionPanel(false); setShowVoteModal(true); }}
+                  onDisabledClick={() => setDisabledReason("현재 진행 중인 투표가 없습니다.")}
+                />
+                <ActionTile
+                  icon={isScheduleConfirmed ? "✏️" : "📅"}
+                  label={isScheduleConfirmed ? "미팅 수정" : "일정 제안"}
+                  tone="blue"
+                  disabled={!isHost}
+                  onClick={() => { setShowActionPanel(false); setShowScheduleModal(true); }}
+                  onDisabledClick={() => setDisabledReason("호스트만 일정을 설정할 수 있어요. 호스트에게 부탁해주세요.")}
+                />
+                <ActionTile
+                  icon="👑"
+                  label="호스트 넘기기"
+                  tone="yellow"
+                  disabled={!isHost}
+                  onClick={() => { setShowActionPanel(false); setShowTransferHostModal(true); }}
+                  onDisabledClick={() => setDisabledReason("호스트만 다른 멤버에게 호스트를 넘길 수 있어요.")}
+                />
+                <ActionTile
+                  icon="🚫"
+                  label="미팅 취소"
+                  tone="red"
+                  badge={hasCancelVote ? "!" : undefined}
+                  onClick={() => {
+                    setShowActionPanel(false);
+                    if (hasCancelVote) setShowVoteModal(true);
+                    else handleCancelPropose();
+                  }}
+                />
+              </div>
+            </div>
+          )}
         </div>
+      )}
+
+      {/* 비활성 사유 팝업 */}
+      {disabledReason && (
+        <DisabledReasonModal
+          reason={disabledReason}
+          onClose={() => setDisabledReason(null)}
+        />
       )}
 
       {/* 투표함 모달 */}
@@ -951,37 +1048,60 @@ function MessageBubble({
 
   const content = message.content;
 
-  // ── [CANCEL_VOTE] → 빨간 정보 버블 (버튼 없음) ───────────────
+  // ── [CANCEL_VOTE] → 빨간 정보 버블 ───────────────
   if (content.startsWith("[CANCEL_VOTE]")) {
     const text = content.replace("[CANCEL_VOTE]", "").trim();
     return (
       <div className="flex justify-center my-1">
-        <div className="rounded-2xl bg-red-50 border border-red-200 px-4 py-2.5 max-w-xs text-center shadow-sm">
-          <p className="text-xs font-bold text-red-600 mb-0.5">❌ 취소 투표</p>
-          <p className="text-xs text-red-500 whitespace-pre-wrap">{text}</p>
+        <div
+          className="px-4 py-2.5 max-w-xs text-center"
+          style={{
+            background: "var(--danger-soft)",
+            border: "1px solid var(--danger)",
+            borderRadius: "var(--radius-lg)",
+            boxShadow: "var(--shadow-sm)",
+          }}
+        >
+          <p className="text-xs font-bold mb-0.5" style={{ color: "var(--danger)" }}>❌ 취소 투표</p>
+          <p className="text-xs whitespace-pre-wrap" style={{ color: "var(--ink-mid)" }}>{text}</p>
         </div>
       </div>
     );
   }
 
-  // ── [SCHEDULE_VOTE] → 파란 정보 버블 (버튼 없음) ─────────────
+  // ── [SCHEDULE_VOTE] → 액센트 정보 버블 ─────────────
   if (content.startsWith("[SCHEDULE_VOTE]")) {
     const text = content.replace("[SCHEDULE_VOTE]", "").trim();
     return (
       <div className="flex justify-center my-1">
-        <div className="rounded-2xl bg-blue-50 border border-blue-200 px-4 py-2.5 max-w-xs text-center shadow-sm">
-          <p className="text-xs font-bold text-blue-600 mb-0.5">📅 일정 투표</p>
-          <p className="text-xs text-blue-500 whitespace-pre-wrap">{text}</p>
+        <div
+          className="px-4 py-2.5 max-w-xs text-center"
+          style={{
+            background: "var(--accent-soft)",
+            border: "1px solid var(--accent)",
+            borderRadius: "var(--radius-lg)",
+            boxShadow: "var(--shadow-sm)",
+          }}
+        >
+          <p className="text-xs font-bold mb-0.5" style={{ color: "var(--accent-ink)" }}>📅 일정 투표</p>
+          <p className="text-xs whitespace-pre-wrap" style={{ color: "var(--ink-mid)" }}>{text}</p>
         </div>
       </div>
     );
   }
 
-  // ── [SYSTEM] → 회색 가운데 텍스트 ────────────────────────────
+  // ── [SYSTEM] → 가운데 텍스트 ────────────────────────────
   if (content.startsWith("[SYSTEM]")) {
     return (
       <div className="flex justify-center">
-        <div className="rounded-full bg-gray-100 px-4 py-1.5 text-xs text-gray-500">
+        <div
+          className="px-3 py-1.5 text-xs"
+          style={{
+            background: "var(--surface-muted)",
+            color: "var(--ink-soft)",
+            borderRadius: 999,
+          }}
+        >
           {content.replace("[SYSTEM]", "").trim()}
         </div>
       </div>
@@ -1005,9 +1125,25 @@ function MessageBubble({
           onClick={onAvatarClick}
         >
           {photoSrc ? (
-            <img src={photoSrc} alt={nickname} className="h-8 w-8 rounded-full object-cover hover:ring-2 hover:ring-blue-300 transition-all" />
+            <img
+              src={photoSrc}
+              alt={nickname}
+              className="object-cover transition-all"
+              style={{
+                width: 32, height: 32, borderRadius: "50%",
+                border: "1.5px solid var(--surface)",
+              }}
+            />
           ) : (
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-300 transition-colors">
+            <div
+              className="flex items-center justify-center font-semibold transition-colors"
+              style={{
+                width: 32, height: 32, borderRadius: "50%",
+                background: "var(--surface-muted)",
+                color: "var(--ink-mid)",
+                fontSize: 11,
+              }}
+            >
               {nickname.charAt(0).toUpperCase()}
             </div>
           )}
@@ -1015,33 +1151,54 @@ function MessageBubble({
       )}
       <div className={`flex flex-col gap-0.5 max-w-[72%] ${isMe ? "items-end" : "items-start"}`}>
         {!isMe && showNickname && (
-          <span className="text-xs text-gray-500 font-medium px-1">{nickname}</span>
+          <span
+            className="font-bold px-1"
+            style={{ fontSize: 11, color: "var(--ink-mid)", letterSpacing: "-0.01em" }}
+          >
+            {nickname}
+          </span>
         )}
-        <div className={`flex items-end gap-1 ${isMe ? "flex-row-reverse" : "flex-row"}`}>
+        <div className={`flex items-end gap-1.5 ${isMe ? "flex-row-reverse" : "flex-row"}`}>
           {isMe && unread > 0 && (
-            <span className="text-xs font-bold text-yellow-500 mb-0.5">{unread}</span>
+            <span className="text-xs font-bold mb-0.5" style={{ color: "var(--warning)" }}>{unread}</span>
           )}
-          <div className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words ${
-            isMe
-              ? "rounded-br-sm bg-blue-600 text-white"
-              : "rounded-bl-sm bg-white text-gray-900 border border-gray-100 shadow-sm"
-          }`}>
+          <div
+            className="px-3.5 py-2.5 whitespace-pre-wrap break-words"
+            style={{
+              fontSize: 14,
+              lineHeight: 1.45,
+              letterSpacing: "-0.01em",
+              background: isMe ? "var(--ink)" : "var(--surface)",
+              color: isMe ? "var(--bg)" : "var(--ink)",
+              border: isMe ? "none" : "1px solid var(--border)",
+              borderRadius: "var(--radius-md)",
+              borderBottomRightRadius: isMe ? 6 : "var(--radius-md)",
+              borderBottomLeftRadius: isMe ? "var(--radius-md)" : 6,
+            }}
+          >
             {content}
           </div>
           {!isMe && unread > 0 && (
-            <span className="text-xs font-bold text-yellow-500 mb-0.5">{unread}</span>
+            <span className="text-xs font-bold mb-0.5" style={{ color: "var(--warning)" }}>{unread}</span>
           )}
           {onReport && (
             <button
               onClick={onReport}
-              className="mb-0.5 flex-shrink-0 rounded-full p-1 text-gray-300 hover:bg-red-50 hover:text-red-400 transition-colors"
+              className="mb-0.5 flex-shrink-0 transition-colors"
+              style={{
+                padding: 4,
+                borderRadius: 999,
+                color: "var(--ink-soft)",
+              }}
               title="신고"
             >
               ⚑
             </button>
           )}
         </div>
-        <span className="text-xs text-gray-400 px-1">{time}</span>
+        <span className="px-1" style={{ fontSize: 10, color: "var(--ink-soft)" }}>
+          {time}
+        </span>
       </div>
     </div>
   );
@@ -1240,5 +1397,117 @@ function SendIcon() {
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
       <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
     </svg>
+  );
+}
+
+// ─── 액션 패널 타일 ──────────────────────────────────────────────
+function ActionTile({
+  icon, label, onClick, tone, badge, disabled, onDisabledClick,
+}: {
+  icon: string;
+  label: string;
+  onClick: () => void;
+  tone: "amber" | "blue" | "yellow" | "orange" | "red";
+  badge?: number | string;
+  disabled?: boolean;
+  onDisabledClick?: () => void;
+}) {
+  const toneMap: Record<typeof tone, { bg: string; ink: string }> = {
+    amber:  { bg: "#FEF3C7", ink: "#B45309" },
+    blue:   { bg: "#DBEAFE", ink: "#1D4ED8" },
+    yellow: { bg: "#FEF9C3", ink: "#A16207" },
+    orange: { bg: "#FFEDD5", ink: "#C2410C" },
+    red:    { bg: "#FEE2E2", ink: "#B91C1C" },
+  };
+  const { bg, ink } = toneMap[tone];
+
+  const handleClick = () => {
+    if (disabled) {
+      onDisabledClick?.();
+    } else {
+      onClick();
+    }
+  };
+
+  return (
+    <button
+      onClick={handleClick}
+      className="flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
+    >
+      <div
+        className="relative flex items-center justify-center"
+        style={{
+          width: 56, height: 56, borderRadius: 18,
+          background: disabled ? "#F1F1F3" : bg,
+          fontSize: 24,
+          filter: disabled ? "grayscale(1)" : undefined,
+          opacity: disabled ? 0.55 : 1,
+          transition: "background 0.15s ease, opacity 0.15s ease",
+        }}
+      >
+        {icon}
+        {!disabled && badge !== undefined && (
+          <span className="absolute -top-1 -right-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[11px] font-bold text-white">
+            {badge}
+          </span>
+        )}
+      </div>
+      <span
+        className="text-[11px] font-semibold whitespace-nowrap"
+        style={{
+          color: disabled ? "#9CA3AF" : ink,
+          letterSpacing: "-0.01em",
+        }}
+      >
+        {label}
+      </span>
+    </button>
+  );
+}
+
+// ─── 비활성 사유 팝업 ─────────────────────────────────────────────
+function DisabledReasonModal({
+  reason, onClose,
+}: {
+  reason: string;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-6"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-xs rounded-3xl bg-white p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex items-center justify-center">
+          <div
+            className="flex items-center justify-center"
+            style={{
+              width: 48, height: 48, borderRadius: 999,
+              background: "#FEF3C7",
+              fontSize: 24,
+            }}
+          >
+            ℹ️
+          </div>
+        </div>
+        <p className="mb-5 text-center text-sm leading-relaxed text-gray-700">
+          {reason}
+        </p>
+        <button
+          onClick={onClose}
+          className="w-full rounded-xl bg-gray-900 py-3 text-sm font-bold text-white active:scale-[0.98] transition-transform"
+        >
+          확인
+        </button>
+      </div>
+    </div>
   );
 }

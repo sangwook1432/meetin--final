@@ -9,6 +9,13 @@ import { useRouter } from "next/navigation";
 import { getMyAfterRequests, deleteAfterRequest } from "@/lib/api";
 import { AppShell } from "@/components/ui/AppShell";
 import type { AfterRequestItem } from "@/types";
+import { T, Icon, MoreNavBar } from "@/components/me/MoreAtoms";
+
+function formatDate(value: string) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleDateString("ko-KR", { month: "short", day: "numeric" });
+}
 
 export default function MessagesPage() {
   const router = useRouter();
@@ -23,72 +30,148 @@ export default function MessagesPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const handleCopy = (phone: string) => {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(phone).catch(() => {});
+    }
+  };
+
   return (
     <AppShell>
-      <div className="mx-auto max-w-md px-4 py-5">
-        <div className="mb-5 flex items-center gap-2">
-          <button
-            onClick={() => router.back()}
-            className="rounded-full p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-          >
-            ←
-          </button>
-          <h1 className="text-xl font-black text-gray-900">쪽지함</h1>
-        </div>
+      <div style={{ background: T.bg, minHeight: "100%", fontFamily: T.fontSans, paddingBottom: 40 }}>
+        <MoreNavBar title="쪽지함" fallbackHref="/me" />
 
-        {loading ? (
-          <div className="flex flex-col gap-3">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="h-24 animate-pulse rounded-2xl bg-gray-100" />
-            ))}
-          </div>
-        ) : error ? (
-          <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-6 text-center">
-            <p className="text-sm text-red-600">{error}</p>
-          </div>
-        ) : items.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-16 text-center">
-            <span className="text-5xl">💌</span>
-            <p className="text-base font-semibold text-gray-600">아직 쪽지가 없어요</p>
-            <p className="text-sm text-gray-400">애프터 신청을 받으면 여기서 확인할 수 있습니다</p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {items.map((item) => (
-              <div key={item.id} onClick={() => router.push(`/profile/${item.sender_id}`)} className="rounded-2xl border border-pink-100 bg-pink-50 p-4 cursor-pointer active:opacity-80">
-                <div className="mb-2 flex items-center justify-between">
-                  <p className="text-sm font-bold text-pink-800">
-                    💌 {item.sender_nickname || "익명"}님의 애프터 신청
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <p className="text-xs text-gray-400">
-                      {new Date(item.created_at).toLocaleDateString("ko-KR")}
-                    </p>
-                    <button
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        await deleteAfterRequest(item.id);
-                        setItems((prev) => prev.filter((x) => x.id !== item.id));
-                      }}
-                      className="text-gray-300 hover:text-gray-500 text-base leading-none"
-                      title="삭제"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </div>
-                <p className="text-sm text-gray-700 leading-relaxed">{item.message}</p>
-                <div className="mt-3 flex items-center gap-2 rounded-xl border border-pink-200 bg-white px-3 py-2">
-                  <span className="text-xs text-gray-400">전화번호</span>
-                  <span className="text-sm font-semibold text-gray-900">{item.sender_phone}</span>
-                </div>
-                <p className="mt-1.5 text-right text-xs text-gray-400">
-                  미팅 #{item.meeting_id}
-                </p>
-              </div>
-            ))}
+        {!loading && !error && items.length > 0 && (
+          <div style={{
+            padding: "14px 16px 0", display: "flex",
+            alignItems: "center", justifyContent: "space-between",
+          }}>
+            <div style={{ fontSize: 12, color: T.inkSoft }}>
+              <span style={{ fontWeight: 700, color: T.ink }}>{items.length}</span>개의 애프터 신청
+            </div>
           </div>
         )}
+
+        <div style={{ padding: "12px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+          {loading ? (
+            [...Array(3)].map((_, i) => (
+              <div key={i} style={{
+                height: 100, borderRadius: T.radiusLg, background: T.surfaceMuted,
+                animation: "meetin-pulse 1.4s ease-in-out infinite",
+              }} />
+            ))
+          ) : error ? (
+            <div style={{
+              background: T.warningSoft, border: `1px solid ${T.warning}`,
+              borderRadius: T.radiusMd, padding: "12px 14px",
+              fontSize: 12.5, color: "oklch(0.45 0.13 70)",
+            }}>
+              {error}
+            </div>
+          ) : items.length === 0 ? (
+            <div style={{
+              background: T.surface, border: `1px solid ${T.border}`,
+              borderRadius: T.radiusLg, padding: "40px 22px", textAlign: "center",
+            }}>
+              <div style={{
+                width: 52, height: 52, margin: "0 auto", borderRadius: 999,
+                background: T.surfaceMuted, color: T.inkSoft,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <Icon name="mail" size={24} />
+              </div>
+              <div style={{ marginTop: 12, fontSize: 14, fontWeight: 700, color: T.ink }}>
+                아직 쪽지가 없어요
+              </div>
+              <div style={{ marginTop: 4, fontSize: 12, color: T.inkSoft }}>
+                애프터 신청을 받으면 여기서 확인할 수 있어요
+              </div>
+            </div>
+          ) : (
+            items.map((item) => (
+              <div
+                key={item.id}
+                onClick={() => router.push(`/profile/${item.sender_id}`)}
+                style={{
+                  background: T.surface, border: `1px solid ${T.accent}`,
+                  borderRadius: T.radiusLg, padding: 14,
+                  position: "relative", overflow: "hidden", cursor: "pointer",
+                }}
+              >
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    await deleteAfterRequest(item.id);
+                    setItems((prev) => prev.filter((x) => x.id !== item.id));
+                  }}
+                  aria-label="삭제"
+                  style={{
+                    position: "absolute", top: 10, right: 10,
+                    width: 28, height: 28, borderRadius: 999,
+                    background: "transparent", border: 0, cursor: "pointer",
+                    color: T.inkSoft, padding: 0,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}
+                >
+                  <Icon name="x" size={14} />
+                </button>
+
+                <div style={{ display: "flex", alignItems: "center", gap: 10, paddingRight: 32 }}>
+                  <div style={{
+                    width: 38, height: 38, borderRadius: 999,
+                    background: T.accentSoft, color: T.accentInk,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 14, fontWeight: 800, flexShrink: 0,
+                  }}>{(item.sender_nickname ?? "?").slice(0, 1)}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: T.ink, letterSpacing: "-0.01em" }}>
+                      {item.sender_nickname ?? "익명"}님의 애프터
+                    </div>
+                    <div style={{
+                      fontSize: 11, color: T.inkSoft, marginTop: 1, fontFamily: T.fontMono,
+                    }}>
+                      미팅 #{item.meeting_id} · {formatDate(item.created_at)}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{
+                  marginTop: 11, padding: "10px 12px",
+                  background: T.bg, borderRadius: T.radiusMd,
+                  fontSize: 13, color: T.ink, lineHeight: 1.55, letterSpacing: "-0.005em",
+                  whiteSpace: "pre-wrap",
+                }}>{item.message}</div>
+
+                <div style={{
+                  marginTop: 10, padding: "9px 12px",
+                  border: `1px dashed ${T.borderStrong}`, borderRadius: T.radiusMd,
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                }}>
+                  <div>
+                    <div style={{
+                      fontSize: 10, color: T.inkSoft, fontWeight: 600, letterSpacing: "0.05em",
+                    }}>연락처</div>
+                    <div style={{
+                      fontSize: 13, fontWeight: 700, color: T.ink, fontFamily: T.fontMono, marginTop: 1,
+                    }}>
+                      {item.sender_phone}
+                    </div>
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleCopy(item.sender_phone ?? ""); }}
+                    style={{
+                      padding: "7px 12px", borderRadius: T.radiusSm,
+                      background: T.ink, color: "#FFF", border: 0,
+                      fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                    }}
+                  >
+                    복사
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </AppShell>
   );

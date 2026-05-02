@@ -1,36 +1,87 @@
 "use client";
 
 /**
- * AppShell — 바텀 탭 네비게이션이 있는 공통 레이아웃
+ * AppShell — V1 Soft Trust 디자인의 공통 레이아웃
  *
- * noPadding=true: 채팅방 같이 자체 스크롤 영역을 가진 페이지용
- *   (pb-20 제거, 자식이 직접 높이 관리)
+ * 바텀 5탭: 둘러보기 / 매칭권 / 내 프로필 / 채팅 / 더보기
+ *  - 더보기는 /me 허브 페이지로 이동 (단독 페이지)
+ *
+ * Props:
+ *  - noPadding: 자체 스크롤을 가진 페이지(채팅방)에서 패딩 제거
+ *  - noHeader: 상단 헤더 숨김
+ *  - noNav: 바텀 탭 숨김 (채팅방 페이지)
  */
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { deleteAccount } from "@/lib/api";
 
 const TABS = [
-  { href: "/discover",      label: "둘러보기",  icon: "🔍" },
-  { href: "/vacancies",     label: "빈자리",    icon: "👥" },
-  { href: "/me/myprofile",  label: "내 프로필", icon: "👤" },
-  { href: "/chats",         label: "채팅",      icon: "💬" },
+  { href: "/discover",     label: "둘러보기", icon: "search" as const },
+  { href: "/me/tickets",   label: "매칭권",   icon: "ticket" as const },
+  { href: "/me/myprofile", label: "내 프로필", icon: "user" as const },
+  { href: "/chats",        label: "채팅",     icon: "chat" as const },
 ];
 
-const MENU_ITEMS = [
-  { href: "/me/friends",   label: "친구",    icon: "👫" },
-  { href: "/me/messages",  label: "쪽지함",  icon: "💌" },
-  { href: "/me/tickets",   label: "매칭권",  icon: "🎫" },
-  { href: "/me/wallet",    label: "결제",    icon: "💳" },
-  { href: "/me/meetings",  label: "내 미팅", icon: "🤝" },
-  { href: "/me/schedule",  label: "내 일정", icon: "📅" },
-  { href: "/me/profile",   label: "내 정보", icon: "👤" },
-  { href: "/me/support",   label: "고객센터", icon: "💬" },
-  { href: "/me/bizinfo",  label: "사업자정보", icon: "🏢" },
+const MORE_PATHS = [
+  "/me",
+  "/me/friends",
+  "/me/messages",
+  "/me/wallet",
+  "/me/meetings",
+  "/me/schedule",
+  "/me/profile",
+  "/me/support",
+  "/me/bizinfo",
+  "/me/docs",
 ];
+
+type IconName = "search" | "ticket" | "user" | "chat";
+
+function NavIcon({ name, on }: { name: IconName; on: boolean }) {
+  const c = on ? "var(--accent)" : "var(--ink-soft)";
+  const sw = 2;
+  if (name === "search") {
+    return (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <circle cx="11" cy="11" r="7" stroke={c} strokeWidth={sw}/>
+        <path d="M20 20l-3.5-3.5" stroke={c} strokeWidth={sw} strokeLinecap="round"/>
+      </svg>
+    );
+  }
+  if (name === "ticket") {
+    return (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <path d="M3 9c1.5 0 1.5 2 0 2v3a2 2 0 002 2h14a2 2 0 002-2v-3c-1.5 0-1.5-2 0-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v3z" stroke={c} strokeWidth={sw}/>
+        <path d="M9 4v16" stroke={c} strokeWidth={sw} strokeDasharray="2 2"/>
+      </svg>
+    );
+  }
+  if (name === "chat") {
+    return (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <path d="M21 11.5a8.4 8.4 0 01-1.2 4.3 8.5 8.5 0 01-7.3 4.2 8.4 8.4 0 01-4.3-1.2L3 20l1.2-5.2A8.4 8.4 0 013 11.5a8.5 8.5 0 014.2-7.3A8.4 8.4 0 0111.5 3a8.5 8.5 0 018.5 8.5z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    );
+  }
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="8" r="4" stroke={c} strokeWidth={sw}/>
+      <path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" stroke={c} strokeWidth={sw} strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function MoreIcon({ on }: { on: boolean }) {
+  const c = on ? "var(--accent)" : "var(--ink-soft)";
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+      <circle cx="6" cy="12" r="1.6" fill={c}/>
+      <circle cx="12" cy="12" r="1.6" fill={c}/>
+      <circle cx="18" cy="12" r="1.6" fill={c}/>
+    </svg>
+  );
+}
 
 export function AppShell({
   children,
@@ -44,97 +95,80 @@ export function AppShell({
   noNav?: boolean;
 }) {
   const pathname = usePathname();
-  const router = useRouter();
-  const { user, logout } = useAuth();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const dragStartY = useRef<number>(0);
-  const [dragOffset, setDragOffset] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
-  const [withdrawOpen, setWithdrawOpen] = useState(false);
-  const [withdrawAgreed, setWithdrawAgreed] = useState(false);
-  const [withdrawing, setWithdrawing] = useState(false);
-  const [withdrawError, setWithdrawError] = useState<string | null>(null);
+  const { user } = useAuth();
 
-  useEffect(() => {
-    document.body.style.overflow = menuOpen || withdrawOpen ? "hidden" : "";
-    return () => { document.body.style.overflow = ""; };
-  }, [menuOpen, withdrawOpen]);
-
-  const walletBalance = user?.balance ?? 0;
   const ticketCount = user?.matching_tickets ?? 0;
-  // Case A: 잔액 > 1000 → 탈퇴 차단
-  // Case B: 잔액 <= 1000, 매칭권 > 0 → 경고 + 체크박스
-  // Case C: 잔액 <= 1000, 매칭권 0 → 일반 확인
-  const withdrawCase: "A" | "B" | "C" =
-    walletBalance > 1000 ? "A" : ticketCount > 0 ? "B" : "C";
 
-  function handleSheetTouchStart(e: React.TouchEvent) {
-    dragStartY.current = e.touches[0].clientY;
-    setIsDragging(true);
-  }
-
-  function handleSheetTouchMove(e: React.TouchEvent) {
-    const delta = e.touches[0].clientY - dragStartY.current;
-    if (delta > 0) setDragOffset(delta);
-  }
-
-  function handleSheetTouchEnd() {
-    setIsDragging(false);
-    if (dragOffset > 80) {
-      setMenuOpen(false);
-    }
-    setDragOffset(0);
-  }
-
-  function openWithdrawModal() {
-    setWithdrawAgreed(false);
-    setWithdrawError(null);
-    setWithdrawOpen(true);
-  }
-
-  async function handleDeleteAccount() {
-    setWithdrawing(true);
-    setWithdrawError(null);
-    try {
-      await deleteAccount();
-      logout();
-    } catch (e: unknown) {
-      setWithdrawError(e instanceof Error ? e.message : "탈퇴 중 오류가 발생했습니다.");
-    } finally {
-      setWithdrawing(false);
-    }
-  }
-
-  const menuActive = MENU_ITEMS.some(
-    (item) => pathname === item.href || pathname.startsWith(item.href + "/")
+  const moreActive = MORE_PATHS.some(
+    (p) => pathname === p || pathname.startsWith(p + "/")
   );
 
   return (
-    <div className={`flex flex-col bg-gray-50 ${noNav ? "h-screen overflow-hidden" : "min-h-screen"}`}>
+    <div
+      className={`flex flex-col ${noNav ? "h-screen overflow-hidden" : "min-h-screen"}`}
+      style={{ background: "var(--bg)" }}
+    >
       {/* 상단 헤더 */}
       {!noHeader && (
-        <header className="sticky top-0 z-20 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-3 shadow-sm">
-          <Link href="/discover" className="text-xl font-black tracking-tight text-gray-900">
-            MEETIN<span className="text-blue-600">.</span>
+        <header
+          className="sticky top-0 z-20 flex items-center justify-between px-5 py-3.5"
+          style={{
+            background: "var(--surface)",
+            borderBottom: "1px solid var(--border)",
+          }}
+        >
+          <Link
+            href="/discover"
+            className="text-xl font-extrabold tracking-tight"
+            style={{ color: "var(--ink)", letterSpacing: "-0.04em" }}
+          >
+            MEETIN<span style={{ color: "var(--accent)" }}>.</span>
           </Link>
           {user && (
-            <div className="flex items-center gap-3 text-sm text-gray-500">
+            <div className="flex items-center gap-2.5">
               {user.verification_status === "VERIFIED" ? (
-                <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
-                  ✓ 인증
+                <span
+                  className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold"
+                  style={{
+                    background: "var(--success-soft)",
+                    color: "var(--success)",
+                  }}
+                >
+                  <svg width="10" height="10" viewBox="0 0 12 12">
+                    <path d="M2 6l3 3 5-6" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  인증
                 </span>
               ) : (
                 <Link
                   href="/me/docs"
-                  className="rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-semibold text-yellow-700 hover:bg-yellow-200 active:bg-yellow-200"
+                  className="rounded-full px-2.5 py-1 text-[11px] font-bold"
+                  style={{
+                    background: "var(--warning-soft)",
+                    color: "oklch(0.45 0.14 70)",
+                  }}
                 >
                   인증 필요 →
                 </Link>
               )}
+              <Link
+                href="/me/tickets"
+                className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold"
+                style={{
+                  background: "var(--accent-soft)",
+                  color: "var(--accent-ink)",
+                }}
+              >
+                🎫 {ticketCount}
+              </Link>
               {user.is_admin && (
                 <Link
                   href="/admin"
-                  className="rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-semibold text-purple-700 hover:bg-purple-200 active:bg-purple-200"
+                  className="rounded-full px-2.5 py-1 text-[11px] font-bold"
+                  style={{
+                    background: "oklch(0.94 0.04 290)",
+                    color: "oklch(0.45 0.18 290)",
+                  }}
                 >
                   🛡️ 관리자
                 </Link>
@@ -147,220 +181,61 @@ export function AppShell({
       {/* 페이지 콘텐츠 */}
       <main
         className={noPadding ? "flex-1 flex flex-col overflow-hidden" : "flex-1"}
-        style={!noPadding ? { paddingBottom: "calc(5rem + env(safe-area-inset-bottom, 0px))" } : undefined}
+        style={!noPadding && !noNav ? { paddingBottom: "calc(5rem + env(safe-area-inset-bottom, 0px))" } : undefined}
       >
         {children}
       </main>
 
       {/* 바텀 탭 */}
-      {!noNav && <nav className="fixed bottom-0 left-0 right-0 z-20 flex border-t border-gray-100 bg-white" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
-        {TABS.map((tab) => {
-          const active = pathname === tab.href || pathname.startsWith(tab.href + "/");
-          return (
-            <Link
-              key={tab.href}
-              href={tab.href}
-              className={`flex flex-1 flex-col items-center py-2.5 text-xs transition-colors ${
-                active ? "text-blue-600" : "text-gray-400 hover:text-gray-600 active:text-gray-800"
-              }`}
-            >
-              <span className="text-lg leading-none">{tab.icon}</span>
-              <span className={`mt-0.5 font-medium ${active ? "text-blue-600" : ""}`} style={{ fontSize: "10px" }}>
-                {tab.label}
-              </span>
-            </Link>
-          );
-        })}
-
-        {/* 더보기 탭 */}
-        <button
-          onClick={() => setMenuOpen(true)}
-          className={`flex flex-1 flex-col items-center py-2.5 text-xs transition-colors ${
-            menuActive ? "text-blue-600" : "text-gray-400 hover:text-gray-600 active:text-gray-800"
-          }`}
+      {!noNav && (
+        <nav
+          className="fixed bottom-0 left-0 right-0 z-20 flex"
+          style={{
+            background: "var(--surface)",
+            borderTop: "1px solid var(--border)",
+            paddingBottom: "env(safe-area-inset-bottom, 0px)",
+          }}
         >
-          <span className="text-lg leading-none">☰</span>
-          <span className="mt-0.5 font-medium" style={{ fontSize: "10px" }}>더보기</span>
-        </button>
-      </nav>}
-
-      {/* 탈퇴 모달 */}
-      {withdrawOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50">
-          <div className="w-full max-w-lg rounded-t-2xl bg-white px-5 py-6 shadow-xl">
-
-            {/* ── Case A: 잔액 > 1,000원 → 탈퇴 차단 ── */}
-            {withdrawCase === "A" && (
-              <>
-                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
-                  <span className="text-2xl">⚠️</span>
-                </div>
-                <h2 className="text-lg font-black text-gray-900">탈퇴가 불가능합니다</h2>
-                <p className="mt-2 text-sm leading-relaxed text-gray-500">
-                  환불 가능한 지갑 잔액이 남아있어 탈퇴할 수 없습니다.
-                  잔액을 모두 소진하시거나 환불 신청 후 다시 시도해 주세요.
-                </p>
-                <div className="mt-3 rounded-xl bg-red-50 px-4 py-3">
-                  <span className="text-sm font-bold text-red-600">
-                    현재 잔액: {walletBalance.toLocaleString()}원
-                  </span>
-                </div>
-                <button
-                  onClick={() => setWithdrawOpen(false)}
-                  className="mt-5 w-full rounded-xl border border-gray-200 py-3 text-sm font-semibold text-gray-700 active:bg-gray-50"
-                >
-                  돌아가기
-                </button>
-              </>
-            )}
-
-            {/* ── Case B: 잔액 ≤ 1,000원 + 매칭권 보유 → 경고 + 체크박스 ── */}
-            {withdrawCase === "B" && (
-              <>
-                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-orange-100">
-                  <span className="text-2xl">🎫</span>
-                </div>
-                <h2 className="text-lg font-black text-gray-900">매칭권이 소멸됩니다</h2>
-                <p className="mt-2 text-sm leading-relaxed text-gray-500">
-                  현재 보유 중인 매칭권{" "}
-                  <span className="font-bold text-orange-500">{ticketCount}개</span>가 모두 소멸되며,
-                  탈퇴 후 어떠한 경우에도 복구 및 환불이 불가합니다.
-                </p>
-                <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl bg-orange-50 px-4 py-3">
-                  <input
-                    type="checkbox"
-                    checked={withdrawAgreed}
-                    onChange={(e) => setWithdrawAgreed(e.target.checked)}
-                    className="mt-0.5 h-4 w-4 shrink-0 accent-red-500"
-                  />
-                  <span className="text-xs leading-relaxed text-gray-600">
-                    위 내용을 확인하였으며, 매칭권 소멸 및 회원 탈퇴에 동의합니다.
-                  </span>
-                </label>
-                {withdrawError && (
-                  <p className="mt-3 rounded-xl bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-600">
-                    {withdrawError}
-                  </p>
-                )}
-                <div className="mt-5 flex gap-2">
-                  <button
-                    onClick={() => setWithdrawOpen(false)}
-                    disabled={withdrawing}
-                    className="flex-1 rounded-xl border border-gray-200 py-3 text-sm font-semibold text-gray-600 active:bg-gray-50 disabled:opacity-50"
-                  >
-                    취소
-                  </button>
-                  <button
-                    onClick={handleDeleteAccount}
-                    disabled={!withdrawAgreed || withdrawing}
-                    className="flex-1 rounded-xl bg-red-500 py-3 text-sm font-bold text-white transition-opacity active:bg-red-600 disabled:opacity-40"
-                  >
-                    {withdrawing ? "처리 중..." : "탈퇴하기"}
-                  </button>
-                </div>
-              </>
-            )}
-
-            {/* ── Case C: 잔액 ≤ 1,000원 + 매칭권 0개 → 일반 확인 ── */}
-            {withdrawCase === "C" && (
-              <>
-                <h2 className="text-lg font-black text-gray-900">정말 탈퇴하시겠어요?</h2>
-                <p className="mt-2 text-sm leading-relaxed text-gray-500">
-                  탈퇴 시 유저 정보 및 미팅 내역이 모두 삭제되며 복구할 수 없습니다.
-                </p>
-                {withdrawError && (
-                  <p className="mt-3 rounded-xl bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-600">
-                    {withdrawError}
-                  </p>
-                )}
-                <div className="mt-5 flex gap-2">
-                  <button
-                    onClick={() => setWithdrawOpen(false)}
-                    disabled={withdrawing}
-                    className="flex-1 rounded-xl border border-gray-200 py-3 text-sm font-semibold text-gray-600 active:bg-gray-50 disabled:opacity-50"
-                  >
-                    취소
-                  </button>
-                  <button
-                    onClick={handleDeleteAccount}
-                    disabled={withdrawing}
-                    className="flex-1 rounded-xl bg-red-500 py-3 text-sm font-bold text-white active:bg-red-600 disabled:opacity-50"
-                  >
-                    {withdrawing ? "처리 중..." : "탈퇴하기"}
-                  </button>
-                </div>
-              </>
-            )}
-
-            <div style={{ height: "max(0.5rem, env(safe-area-inset-bottom, 0px))" }} />
-          </div>
-        </div>
-      )}
-
-      {/* 슬라이드업 메뉴 오버레이 */}
-      {menuOpen && (
-        <>
-          {/* 배경 딤 */}
-          <div
-            className="fixed inset-0 z-30 bg-black/40"
-            onClick={() => setMenuOpen(false)}
-          />
-          {/* 바텀시트 */}
-          <div
-            className="fixed bottom-0 left-0 right-0 z-40 rounded-t-2xl bg-white shadow-xl"
-            style={{
-              transform: `translateY(${dragOffset}px)`,
-              transition: isDragging ? "none" : "transform 0.25s ease",
-            }}
-            onTouchStart={handleSheetTouchStart}
-            onTouchMove={handleSheetTouchMove}
-            onTouchEnd={handleSheetTouchEnd}
-          >
-            <div className="mx-auto mb-3 mt-3 h-1 w-10 rounded-full bg-gray-300" />
-            <div className="px-4 pb-2">
-              <p className="mb-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">메뉴</p>
-              {MENU_ITEMS.map((item) => (
-                <button
-                  key={item.href}
-                  onClick={() => {
-                    setMenuOpen(false);
-                    router.push(item.href);
+          {TABS.map((tab) => {
+            const active = pathname === tab.href || pathname.startsWith(tab.href + "/");
+            return (
+              <Link
+                key={tab.href}
+                href={tab.href}
+                className="flex flex-1 flex-col items-center gap-1 py-2.5 transition-colors"
+              >
+                <NavIcon name={tab.icon} on={active}/>
+                <span
+                  className="font-semibold"
+                  style={{
+                    fontSize: "10px",
+                    letterSpacing: "-0.01em",
+                    color: active ? "var(--accent)" : "var(--ink-soft)",
                   }}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-3.5 text-left hover:bg-gray-50 active:bg-gray-100 transition-colors"
                 >
-                  <span className="text-xl">{item.icon}</span>
-                  <span className="text-sm font-semibold text-gray-800">{item.label}</span>
-                </button>
-              ))}
+                  {tab.label}
+                </span>
+              </Link>
+            );
+          })}
 
-              <div className="my-2 border-t border-gray-100" />
-
-              <button
-                onClick={() => {
-                  setMenuOpen(false);
-                  logout();
-                }}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-3.5 text-left hover:bg-red-50 active:bg-red-100 transition-colors"
-              >
-                <span className="text-xl">🚪</span>
-                <span className="text-sm font-semibold text-red-500">로그아웃</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setMenuOpen(false);
-                  openWithdrawModal();
-                }}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-3.5 text-left hover:bg-gray-50 active:bg-gray-100 transition-colors"
-              >
-                <span className="text-xl">💔</span>
-                <span className="text-sm font-semibold text-gray-400">탈퇴하기</span>
-              </button>
-
-              <div style={{ height: "max(1rem, env(safe-area-inset-bottom, 0px))" }} />
-            </div>
-          </div>
-        </>
+          <Link
+            href="/me"
+            className="flex flex-1 flex-col items-center gap-1 py-2.5"
+          >
+            <MoreIcon on={moreActive}/>
+            <span
+              className="font-semibold"
+              style={{
+                fontSize: "10px",
+                letterSpacing: "-0.01em",
+                color: moreActive ? "var(--accent)" : "var(--ink-soft)",
+              }}
+            >
+              더보기
+            </span>
+          </Link>
+        </nav>
       )}
     </div>
   );

@@ -1,5 +1,17 @@
 "use client";
 
+/**
+ * /me/myprofile — V1 내 프로필 (메인 탭)
+ *
+ * 기능:
+ *  1. 커버 사진 + 아바타 오버랩 (편집 가능)
+ *  2. 닉네임 + 학교/학과/학번/나이
+ *  3. 자기소개 인라인 편집
+ *  4. 탭: 사진 / 10문 10답
+ *  5. 사진 그리드 (추가 업로드, 클릭 시 상세 모달, 삭제)
+ *  6. Q&A 인라인 편집
+ */
+
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { AppShell } from "@/components/ui/AppShell";
@@ -36,19 +48,15 @@ function avatarUrl(url: string | null | undefined) {
 export default function MyProfilePage() {
   const { user, refreshUser } = useAuth();
 
-  // ── 게시물 상태 ──────────────────────────────────────
   const [posts, setPosts] = useState<ProfilePost[]>([]);
   const [postsLoading, setPostsLoading] = useState(true);
 
-  // ── 바이오 인라인 편집 ────────────────────────────────
   const [editingBio, setEditingBio] = useState(false);
   const [bioValue, setBioValue] = useState(user?.bio_short ?? "");
   const [bioSaving, setBioSaving] = useState(false);
 
-  // ── 탭 ────────────────────────────────────────────────
   const [tab, setTab] = useState<"photos" | "qa">("photos");
 
-  // ── 선택된 사진 (상세 뷰) ─────────────────────────────
   const [selected, setSelected] = useState<ProfilePost | null>(null);
 
   useEffect(() => {
@@ -56,18 +64,15 @@ export default function MyProfilePage() {
     return () => { document.body.style.overflow = ""; };
   }, [selected]);
 
-  // ── 10문 10답 ─────────────────────────────────────────
   const [qaAnswers, setQaAnswers] = useState<Record<string, string>>({});
   const [editingQa, setEditingQa] = useState<number | null>(null);
   const [qaInput, setQaInput] = useState("");
   const [qaSaving, setQaSaving] = useState(false);
 
-  // ── 게시물 업로드 ─────────────────────────────────────
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  // ── 커버 업로드 ───────────────────────────────────────
   const coverInputRef = useRef<HTMLInputElement>(null);
   const [coverUploading, setCoverUploading] = useState(false);
 
@@ -78,7 +83,6 @@ export default function MyProfilePage() {
       .finally(() => setPostsLoading(false));
   }, []);
 
-  // qa_answers 파싱
   useEffect(() => {
     try {
       const parsed = user?.qa_answers ? JSON.parse(user.qa_answers) : {};
@@ -86,7 +90,6 @@ export default function MyProfilePage() {
     } catch { setQaAnswers({}); }
   }, [user?.qa_answers]);
 
-  // bio 편집 시 user 값으로 초기화
   useEffect(() => {
     if (!editingBio) setBioValue(user?.bio_short ?? "");
   }, [user?.bio_short, editingBio]);
@@ -97,11 +100,7 @@ export default function MyProfilePage() {
       await updateProfile({ bio_short: bioValue.trim() || undefined });
       await refreshUser?.();
       setEditingBio(false);
-    } catch {
-      /* ignore */
-    } finally {
-      setBioSaving(false);
-    }
+    } catch { /* ignore */ } finally { setBioSaving(false); }
   }
 
   async function saveQaAnswer(n: number) {
@@ -112,9 +111,7 @@ export default function MyProfilePage() {
       await updateQA(next);
       setQaAnswers(next);
       setEditingQa(null);
-    } catch { /* ignore */ } finally {
-      setQaSaving(false);
-    }
+    } catch { /* ignore */ } finally { setQaSaving(false); }
   }
 
   async function handleCoverChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -152,90 +149,110 @@ export default function MyProfilePage() {
       await deleteProfilePost(post.id);
       setPosts((prev) => prev.filter((p) => p.id !== post.id));
       setSelected(null);
-    } catch {
-      alert("삭제 실패");
-    }
+    } catch { alert("삭제 실패"); }
   }
 
-  const entryLabel = user?.entry_year
-    ? `${String(user.entry_year).slice(-2)}학번`
-    : null;
-
+  const entryLabel = user?.entry_year ? `${String(user.entry_year).slice(-2)}학번` : null;
   const infoLine = [
     user?.university,
     user?.major,
     entryLabel,
     user?.age ? `${user.age}세` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  ].filter(Boolean).join(" · ");
+
+  const coverUrl = avatarUrl(user?.cover_url);
+  const photoUrl = avatarUrl(user?.photo_url_1);
 
   return (
     <AppShell>
       <div className="mx-auto max-w-md">
-        {/* ── 커버 + 프로필 사진 ──────────────────────── */}
-        {/* 커버 영역 (h-36) + 프사 절반(h-12) 오버랩 → 아래 여백 h-12 */}
-        <div className="relative mb-3">
-          {/* 커버 사진 */}
+        {/* 커버 + 프로필 사진 */}
+        <div className="relative">
           <button
             onClick={() => coverInputRef.current?.click()}
-            className="relative block h-36 w-full overflow-hidden bg-gray-200"
+            className="relative block w-full overflow-hidden"
+            style={{
+              height: 144,
+              background: coverUrl
+                ? "transparent"
+                : "linear-gradient(135deg, var(--accent-soft) 0%, oklch(0.88 0.06 18) 50%, oklch(0.84 0.05 250) 100%)",
+            }}
           >
-            {avatarUrl(user?.cover_url) ? (
-              <img
-                src={avatarUrl(user?.cover_url)!}
-                alt="커버"
-                className="h-full w-full object-cover"
-              />
+            {coverUrl ? (
+              <img src={coverUrl} alt="커버" className="h-full w-full object-cover" />
             ) : (
-              <div className="flex h-full w-full items-center justify-center gap-2 text-gray-400">
+              <div
+                className="flex h-full w-full items-center justify-center gap-2"
+                style={{ color: "var(--ink-mid)" }}
+              >
                 <span className="text-2xl">🖼️</span>
-                <span className="text-sm">배경사진 추가</span>
+                <span className="text-sm font-semibold">배경사진 추가</span>
               </div>
             )}
-            {/* 커버 업로드 오버레이 */}
             {coverUploading && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/30">
                 <span className="text-white text-sm">업로드 중…</span>
               </div>
             )}
-            {/* 편집 버튼 (우측 하단) */}
             {!coverUploading && (
-              <div className="absolute bottom-2 right-2 rounded-full bg-black/40 px-2.5 py-1 text-xs text-white">
+              <div
+                className="absolute font-semibold"
+                style={{
+                  bottom: 8, right: 10,
+                  background: "rgba(0,0,0,0.4)",
+                  color: "#fff",
+                  padding: "4px 10px",
+                  borderRadius: 999,
+                  fontSize: 11,
+                  letterSpacing: "-0.01em",
+                }}
+              >
                 편집
               </div>
             )}
           </button>
 
-          {/* 프로필 사진 — 커버 하단에서 절반 오버랩 */}
-          <div className="absolute left-4" style={{ bottom: "-48px" }}>
-            {avatarUrl(user?.photo_url_1) ? (
-              <img
-                src={avatarUrl(user?.photo_url_1)!}
-                alt="프로필"
-                className="h-24 w-24 rounded-full object-cover border-4 border-white shadow-md"
-              />
-            ) : (
-              <div className="flex h-24 w-24 items-center justify-center rounded-full bg-gray-200 text-5xl border-4 border-white shadow-md">
-                👤
-              </div>
-            )}
+          {/* 아바타 오버랩 */}
+          <div className="absolute" style={{ left: 16, bottom: -48 }}>
+            <div
+              style={{
+                width: 96, height: 96,
+                borderRadius: "50%",
+                border: "4px solid var(--surface)",
+                boxShadow: "var(--shadow-md)",
+                overflow: "hidden",
+                background: "var(--surface-muted)",
+              }}
+            >
+              {photoUrl ? (
+                <img src={photoUrl} alt="프로필" className="h-full w-full object-cover" />
+              ) : (
+                <div
+                  className="flex h-full w-full items-center justify-center"
+                  style={{ fontSize: 40, background: "var(--surface-muted)" }}
+                >
+                  👤
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* 프사 오버랩 높이(h-12) 만큼 여백 확보 */}
-        <div className="h-14" />
+        <div style={{ height: 56 }} />
 
-        {/* ── 닉네임 + 정보 + 자기소개 ────────────────── */}
-        <div className="px-4 pb-4">
-          <div>
-            <p className="text-xl font-black text-gray-900">
-              {user?.nickname ?? "닉네임 없음"}
+        {/* 닉네임 + 정보 + 자기소개 */}
+        <div className="px-5 pb-4">
+          <p
+            className="font-extrabold"
+            style={{ fontSize: 22, color: "var(--ink)", letterSpacing: "-0.03em" }}
+          >
+            {user?.nickname ?? "닉네임 없음"}
+          </p>
+          {infoLine && (
+            <p className="mt-1" style={{ fontSize: 12, color: "var(--ink-soft)" }}>
+              {infoLine}
             </p>
-            {infoLine && (
-              <p className="mt-1 text-xs text-gray-400">{infoLine}</p>
-            )}
-          </div>
+          )}
 
           {/* 자기소개 */}
           <div className="mt-3">
@@ -246,23 +263,38 @@ export default function MyProfilePage() {
                   onChange={(e) => setBioValue(e.target.value)}
                   maxLength={40}
                   rows={2}
-                  className="w-full resize-none rounded-xl border border-blue-300 bg-blue-50 px-3 py-2 text-base text-gray-900 outline-none focus:border-blue-500"
+                  className="w-full resize-none px-3 py-2 outline-none"
+                  style={{
+                    fontSize: 14,
+                    background: "var(--accent-soft)",
+                    border: "1px solid var(--accent)",
+                    color: "var(--ink)",
+                    borderRadius: "var(--radius-md)",
+                    fontFamily: "var(--font-sans)",
+                    letterSpacing: "-0.01em",
+                  }}
                   placeholder="자기소개를 입력하세요 (최대 40자)"
                   autoFocus
                 />
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-400">{bioValue.length}/40</span>
+                  <span className="text-xs" style={{ color: "var(--ink-soft)" }}>{bioValue.length}/40</span>
                   <div className="flex gap-2">
                     <button
                       onClick={() => setEditingBio(false)}
-                      className="rounded-lg border border-gray-200 px-3 py-1 text-xs text-gray-500 hover:bg-gray-50 active:bg-gray-100"
+                      className="px-3 py-1 text-xs"
+                      style={{
+                        border: "1px solid var(--border)",
+                        color: "var(--ink-mid)",
+                        borderRadius: "var(--radius-sm)",
+                      }}
                     >
                       취소
                     </button>
                     <button
                       onClick={saveBio}
                       disabled={bioSaving}
-                      className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+                      className="px-3 py-1 text-xs font-bold text-white disabled:opacity-50"
+                      style={{ background: "var(--accent)", borderRadius: "var(--radius-sm)" }}
                     >
                       {bioSaving ? "저장 중…" : "저장"}
                     </button>
@@ -272,12 +304,24 @@ export default function MyProfilePage() {
             ) : (
               <button
                 onClick={() => setEditingBio(true)}
-                className="group flex w-full items-center gap-2 text-left"
+                className="group flex w-full items-start gap-2 text-left"
               >
-                <p className={`flex-1 text-sm ${user?.bio_short ? "text-gray-700" : "text-gray-400 italic"}`}>
+                <p
+                  className="flex-1"
+                  style={{
+                    fontSize: 14,
+                    lineHeight: 1.5,
+                    color: user?.bio_short ? "var(--ink-mid)" : "var(--ink-soft)",
+                    fontStyle: user?.bio_short ? "normal" : "italic",
+                    letterSpacing: "-0.01em",
+                  }}
+                >
                   {user?.bio_short ?? "자기소개를 입력해보세요…"}
                 </p>
-                <span className="shrink-0 text-xs text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                <span
+                  className="shrink-0 transition-opacity opacity-0 group-hover:opacity-100"
+                  style={{ fontSize: 12, color: "var(--ink-soft)" }}
+                >
                   ✏️
                 </span>
               </button>
@@ -285,55 +329,81 @@ export default function MyProfilePage() {
           </div>
         </div>
 
-        {/* ── 탭 바 ───────────────────────────────────── */}
-        <div className="flex border-t-2 border-gray-200">
-          {(["photos", "qa"] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`flex-1 py-2.5 text-sm font-semibold transition-colors ${
-                tab === t
-                  ? "border-b-2 border-gray-900 text-gray-900"
-                  : "text-gray-400 hover:text-gray-600"
-              }`}
-            >
-              {t === "photos" ? "사진" : "10문 10답"}
-            </button>
-          ))}
+        {/* 탭 바 */}
+        <div
+          className="flex"
+          style={{ borderTop: "2px solid var(--border)" }}
+        >
+          {(["photos", "qa"] as const).map((t) => {
+            const on = tab === t;
+            return (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className="flex-1 py-3 font-bold transition-colors"
+                style={{
+                  fontSize: 13,
+                  color: on ? "var(--ink)" : "var(--ink-soft)",
+                  borderBottom: `2px solid ${on ? "var(--ink)" : "transparent"}`,
+                  letterSpacing: "-0.01em",
+                }}
+              >
+                {t === "photos" ? "사진" : "10문 10답"}
+              </button>
+            );
+          })}
         </div>
 
-        {/* ── 사진 탭 ─────────────────────────────────── */}
+        {/* 사진 탭 */}
         {tab === "photos" && (
-          <div className="px-0.5 pt-0.5">
+          <div>
             {uploadError && (
-              <div className="mx-4 mb-2 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-600">
+              <div
+                className="mx-4 mt-3 px-3 py-2"
+                style={{
+                  background: "var(--danger-soft)",
+                  border: "1px solid var(--danger)",
+                  color: "var(--danger)",
+                  fontSize: 12,
+                  borderRadius: "var(--radius-md)",
+                }}
+              >
                 {uploadError}
               </div>
             )}
             {postsLoading ? (
-              <div className="grid grid-cols-3 gap-0.5">
+              <div className="grid grid-cols-3 gap-0.5 mt-0.5">
                 {[...Array(6)].map((_, i) => (
-                  <div key={i} className="aspect-square animate-pulse bg-gray-100" />
+                  <div
+                    key={i}
+                    className="aspect-square animate-pulse"
+                    style={{ background: "var(--surface-muted)" }}
+                  />
                 ))}
               </div>
             ) : (
-              <div className="grid grid-cols-3 gap-0.5">
+              <div className="grid grid-cols-3 gap-0.5 mt-0.5">
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploading}
-                  className="aspect-square flex items-center justify-center bg-gray-50 hover:bg-gray-100 transition-colors"
+                  className="aspect-square flex items-center justify-center transition-colors"
+                  style={{
+                    background: "var(--surface-muted)",
+                    color: "var(--ink-soft)",
+                    fontSize: 32,
+                    fontWeight: 200,
+                  }}
                 >
                   {uploading ? (
-                    <span className="text-2xl animate-spin">⏳</span>
-                  ) : (
-                    <span className="text-3xl text-gray-300">＋</span>
-                  )}
+                    <span className="animate-spin" style={{ fontSize: 24 }}>⏳</span>
+                  ) : "＋"}
                 </button>
                 {posts.map((post) => (
                   <button
                     key={post.id}
                     onClick={() => setSelected(post)}
-                    className="aspect-square overflow-hidden bg-gray-100"
+                    className="aspect-square overflow-hidden"
+                    style={{ background: "var(--surface-muted)" }}
                   >
                     <img
                       src={avatarUrl(post.photo_url)!}
@@ -347,15 +417,30 @@ export default function MyProfilePage() {
           </div>
         )}
 
-        {/* ── 10문 10답 탭 ─────────────────────────────── */}
+        {/* Q&A 탭 */}
         {tab === "qa" && (
-          <div className="flex flex-col divide-y divide-gray-100">
-            {QA_QUESTIONS.map(({ n, q, placeholder }) => {
+          <div>
+            {QA_QUESTIONS.map(({ n, q, placeholder }, i) => {
               const answer = qaAnswers[String(n)];
               const isEditing = editingQa === n;
               return (
-                <div key={n} className="px-4 py-4">
-                  <p className="mb-1.5 text-xs font-bold text-blue-500">Q{n}. {q}</p>
+                <div
+                  key={n}
+                  className="px-5 py-4"
+                  style={{
+                    borderBottom: i < QA_QUESTIONS.length - 1 ? "1px solid var(--border)" : "none",
+                  }}
+                >
+                  <p
+                    className="mb-2 font-extrabold"
+                    style={{
+                      fontSize: 11,
+                      color: "var(--accent)",
+                      letterSpacing: "-0.01em",
+                    }}
+                  >
+                    Q{n}. {q}
+                  </p>
                   {isEditing ? (
                     <div className="flex flex-col gap-2">
                       <input
@@ -363,21 +448,35 @@ export default function MyProfilePage() {
                         onChange={(e) => setQaInput(e.target.value)}
                         maxLength={100}
                         placeholder={placeholder}
-                        className="w-full rounded-xl border border-blue-300 bg-blue-50 px-3 py-2 text-base text-gray-900 outline-none focus:border-blue-500"
+                        className="w-full px-3 py-2 outline-none"
+                        style={{
+                          fontSize: 14,
+                          background: "var(--accent-soft)",
+                          border: "1px solid var(--accent)",
+                          color: "var(--ink)",
+                          borderRadius: "var(--radius-md)",
+                          fontFamily: "var(--font-sans)",
+                        }}
                         autoFocus
                         onKeyDown={(e) => e.key === "Enter" && saveQaAnswer(n)}
                       />
                       <div className="flex justify-end gap-2">
                         <button
                           onClick={() => setEditingQa(null)}
-                          className="rounded-lg border border-gray-200 px-3 py-1 text-xs text-gray-500 hover:bg-gray-50 active:bg-gray-100"
+                          className="px-3 py-1 text-xs"
+                          style={{
+                            border: "1px solid var(--border)",
+                            color: "var(--ink-mid)",
+                            borderRadius: "var(--radius-sm)",
+                          }}
                         >
                           취소
                         </button>
                         <button
                           onClick={() => saveQaAnswer(n)}
                           disabled={qaSaving}
-                          className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-bold text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50"
+                          className="px-3 py-1 text-xs font-bold text-white disabled:opacity-50"
+                          style={{ background: "var(--accent)", borderRadius: "var(--radius-sm)" }}
                         >
                           {qaSaving ? "저장 중…" : "저장"}
                         </button>
@@ -386,12 +485,24 @@ export default function MyProfilePage() {
                   ) : (
                     <button
                       onClick={() => { setQaInput(answer ?? ""); setEditingQa(n); }}
-                      className="group flex w-full items-center gap-2 text-left"
+                      className="group flex w-full items-start gap-2 text-left"
                     >
-                      <p className={`flex-1 text-sm ${answer ? "text-gray-800" : "text-gray-400 italic"}`}>
-                        {answer ?? placeholder}
+                      <p
+                        className="flex-1"
+                        style={{
+                          fontSize: 14,
+                          lineHeight: 1.5,
+                          color: answer ? "var(--ink)" : "var(--ink-soft)",
+                          fontStyle: answer ? "normal" : "italic",
+                          letterSpacing: "-0.01em",
+                        }}
+                      >
+                        {answer ?? "아직 답변하지 않았어요"}
                       </p>
-                      <span className="shrink-0 text-xs text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span
+                        className="shrink-0 transition-opacity opacity-0 group-hover:opacity-100"
+                        style={{ fontSize: 12, color: "var(--ink-soft)" }}
+                      >
                         ✏️
                       </span>
                     </button>
@@ -418,34 +529,39 @@ export default function MyProfilePage() {
         />
       </div>
 
-      {/* ── 사진 상세 모달 ───────────────────────────── */}
+      {/* 사진 상세 모달 */}
       {selected && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 animate-fade-in"
           onClick={() => setSelected(null)}
         >
-          <div
-            className="relative w-full max-w-sm mx-4"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="relative w-full max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
             <img
               src={avatarUrl(selected.photo_url)!}
               alt=""
-              className="w-full rounded-2xl object-contain max-h-[70vh]"
+              className="w-full object-contain max-h-[70vh]"
+              style={{ borderRadius: "var(--radius-lg)" }}
             />
             {selected.caption && (
-              <p className="mt-2 text-center text-sm text-white/80">{selected.caption}</p>
+              <p className="mt-2 text-center text-sm" style={{ color: "rgba(255,255,255,0.85)" }}>
+                {selected.caption}
+              </p>
             )}
             <div className="mt-4 flex gap-3">
               <button
                 onClick={() => setSelected(null)}
-                className="flex-1 rounded-xl border border-white/30 py-2.5 text-sm font-semibold text-white hover:bg-white/10 active:bg-white/20"
+                className="flex-1 py-2.5 text-sm font-semibold text-white"
+                style={{
+                  border: "1px solid rgba(255,255,255,0.3)",
+                  borderRadius: "var(--radius-md)",
+                }}
               >
                 닫기
               </button>
               <button
                 onClick={() => handleDelete(selected)}
-                className="flex-1 rounded-xl bg-red-500 py-2.5 text-sm font-bold text-white hover:bg-red-600 active:bg-red-700"
+                className="flex-1 py-2.5 text-sm font-bold text-white"
+                style={{ background: "var(--danger)", borderRadius: "var(--radius-md)" }}
               >
                 삭제
               </button>
