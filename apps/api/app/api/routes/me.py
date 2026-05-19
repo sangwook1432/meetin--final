@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 from app.core.deps import get_db, get_current_user, require_verified
-from app.models.user import User
+from app.models.user import User, VerificationStatus
 from app.models.verification_doc import VerificationDoc, DocType, DocStatus
 from app.core.crypto import decrypt_phone
 from app.core.storage import upload_file, compress_image
@@ -46,9 +46,10 @@ def me(user: User = Depends(get_current_user)):
 
 
 _PROFILE_ALLOWED_FIELDS = {
-    "email", "nickname", "gender", "university", "major", "entry_year", "age",
+    "email", "nickname", "gender", "major", "entry_year", "age",
     "preferred_area", "bio_short", "lookalike_type", "lookalike_value",
 }
+# university는 학교 인증과 직결되므로 임의 변경 금지 — 변경하려면 재인증 플로우 필요
 
 @router.patch("/me/profile", response_model=UserPublic)
 def update_profile(
@@ -173,8 +174,15 @@ def delete_account(
     """
     회원 탈퇴.
     - 지갑 잔액이 남아 있으면 거절 (먼저 출금 필요)
+    - CONFIRMED 미팅(채팅방 활성화) 멤버이면 거절 (미팅 완료/취소 후 재시도)
+    - RECRUITING/FULL/WAITING_CONFIRM 활성 슬롯은 자동 비우기 (매칭권 미소모 상태)
+    - 보유 매칭권 EXPIRED 트랜잭션 기록 후 0으로 소멸 (약관 명시)
     - PII 익명화 후 is_banned=True 처리 (소프트 삭제)
     """
+    from app.models.meeting import Meeting, MeetingStatus
+    from app.models.meeting_slot import MeetingSlot
+    from app.models.ticket_transaction import TicketTransaction, TicketTxType
+
     if user.is_banned:
         raise HTTPException(400, "이미 탈퇴된 계정입니다.")
     if user.balance > 1000:
@@ -182,6 +190,86 @@ def delete_account(
             400,
             f"환불 가능한 지갑 잔액({user.balance:,}원)이 남아 있어 탈퇴할 수 없습니다. 잔액을 소진하거나 환불 신청 후 다시 시도해 주세요.",
         )
+
+    # CONFIRMED 미팅 멤버이면 차단 (채팅방 파기 책임 회피 방지)
+    confirmed_slot = db.execute(
+        select(MeetingSlot)
+        .join(Meeting, Meeting.id == MeetingSlot.meeting_id)
+        .where(
+            MeetingSlot.user_id == user.id,
+            Meeting.status == MeetingStatus.CONFIRMED,
+        )
+        .limit(1)
+    ).scalar_one_or_none()
+    if confirmed_slot:
+        raise HTTPException(
+            400,
+            "확정된 미팅(채팅방 활성)에 참여 중입니다. 미팅 종료 또는 취소 후 탈퇴해주세요.",
+        )
+
+    # RECRUITING / FULL / WAITING_CONFIRM 슬롯은 자동 비우기 (매칭권 미소모 상태)
+    leavable_statuses = [
+        MeetingStatus.RECRUITING,
+        MeetingStatus.FULL,
+        MeetingStatus.WAITING_CONFIRM,
+    ]
+    active_slots = db.execute(
+        select(MeetingSlot)
+        .join(Meeting, Meeting.id == MeetingSlot.meeting_id)
+        .where(
+            MeetingSlot.user_id == user.id,
+            Meeting.status.in_(leavable_statuses),
+        )
+        .with_for_update()
+    ).scalars().all()
+
+    for my_slot in active_slots:
+        meeting = db.execute(
+            select(Meeting).where(Meeting.id == my_slot.meeting_id).with_for_update()
+        ).scalar_one()
+        all_slots = db.execute(
+            select(MeetingSlot).where(MeetingSlot.meeting_id == meeting.id).with_for_update()
+        ).scalars().all()
+
+        my_slot.user_id = None
+        my_slot.confirmed = False
+
+        # WAITING_CONFIRM에서 빠지면 남은 멤버 confirmed 리셋 (전원 재확정 필요)
+        if meeting.status == MeetingStatus.WAITING_CONFIRM:
+            for s in all_slots:
+                if s.user_id is not None:
+                    s.confirmed = False
+
+        remaining_ids = [s.user_id for s in all_slots if s.user_id is not None]
+
+        if not remaining_ids:
+            db.delete(meeting)
+            continue
+
+        # 호스트 재할당 — 같은 팀 우선
+        if meeting.host_user_id == user.id:
+            same_team = [s.user_id for s in all_slots if s.user_id is not None and s.team == my_slot.team]
+            meeting.host_user_id = same_team[0] if same_team else remaining_ids[0]
+
+        # 상태 재계산
+        filled = len(remaining_ids)
+        capacity = len(all_slots)
+        if filled < capacity:
+            meeting.status = MeetingStatus.RECRUITING
+        elif meeting.status != MeetingStatus.CONFIRMED:
+            meeting.status = MeetingStatus.WAITING_CONFIRM
+
+    # 매칭권 소멸 (이력 기록)
+    if user.matching_tickets > 0:
+        expired_amount = user.matching_tickets
+        db.add(TicketTransaction(
+            user_id=user.id,
+            tx_type=TicketTxType.EXPIRED,
+            amount=-expired_amount,
+            tickets_after=0,
+            note="회원 탈퇴로 매칭권 소멸",
+        ))
+        user.matching_tickets = 0
 
     # PII 익명화
     user.username = None
@@ -270,12 +358,17 @@ async def upload_doc_file(
         existing_doc.file_url = file_url
         doc = existing_doc
     else:
+        # 새 doc은 항상 INSERT (REJECTED 이력은 보존)
         doc = VerificationDoc(
             user_id=user.id,
             doc_type=doc_type_enum,
             file_url=file_url,
         )
         db.add(doc)
+
+    # 반려된 유저가 재제출하면 다시 심사 대기 상태로 복귀 → admin 목록에 재노출
+    if user.verification_status == VerificationStatus.REJECTED:
+        user.verification_status = VerificationStatus.PENDING
 
     db.commit()
     db.refresh(doc)

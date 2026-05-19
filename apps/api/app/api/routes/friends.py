@@ -522,7 +522,7 @@ def my_invitations(
 
 
 @router.post("/invitations/{invitation_id}/respond")
-def respond_invitation(
+async def respond_invitation(
     invitation_id: int,
     payload: InviteRespondIn,
     db: Session = Depends(get_db),
@@ -585,52 +585,29 @@ def respond_invitation(
             invitee_nick = user.nickname or f"#{user.id}"
 
             if inviter_total >= 3 and inviter_pending == 0:
-                # 기회 소진 → 자동 퇴장 (매칭권 추가 차감 없음)
-                from app.api.routes.wallet import forfeit_ticket
+                # 기회 소진 → 미팅 파기 + 남은 멤버 전원 환급 + 채팅방 삭제 + 알림
+                # (forfeit_user=inviter는 몰수, 나머지는 환급)
+                from app.api.routes.chats import _execute_forfeit_cancel
+                from app.api.routes.wallet import forfeit_ticket as _forfeit_ticket
+
                 inviter = db.get(User, inv.inviter_id)
                 meeting_obj = db.execute(
                     select(Meeting).where(Meeting.id == inv.meeting_id).with_for_update()
                 ).scalar_one_or_none()
 
                 if inviter and meeting_obj:
-                    forfeit_ticket(db, inviter, meeting_obj.id)
-
-                    inviter_slot = db.execute(
-                        select(MeetingSlot).where(
-                            MeetingSlot.meeting_id == meeting_obj.id,
-                            MeetingSlot.user_id == inviter.id,
-                        ).with_for_update()
-                    ).scalar_one_or_none()
-
-                    if inviter_slot:
-                        inviter_slot.user_id = None
-                        inviter_slot.confirmed = False
-
-                    meeting_obj.status = MeetingStatus.RECRUITING
-
-                    all_slots = db.execute(
-                        select(MeetingSlot).where(MeetingSlot.meeting_id == meeting_obj.id)
-                    ).scalars().all()
-                    for s in all_slots:
-                        if s.user_id is not None:
-                            s.confirmed = False
-
-                    if meeting_obj.host_user_id == inviter.id:
-                        remaining_members = [s.user_id for s in all_slots if s.user_id is not None]
-                        if remaining_members:
-                            meeting_obj.host_user_id = remaining_members[0]
-
+                    inviter_nick = inviter.nickname or f"#{inviter.id}"
+                    system_msg = (
+                        f"[SYSTEM] {invitee_nick}님이 대체 인원 초대를 거절했습니다. "
+                        f"{inviter_nick}님의 초대 기회가 모두 소진되어 미팅이 취소되었습니다."
+                    )
                     if chat_room:
-                        inviter_nick = inviter.nickname or f"#{inviter.id}"
-                        db.add(ChatMessage(
-                            room_id=chat_room.id,
-                            sender_user_id=0,
-                            content=(
-                                f"[SYSTEM] {invitee_nick}님이 대체 인원 초대를 거절했습니다. "
-                                f"{inviter_nick}님의 초대 기회가 모두 소진되어 자동으로 퇴장 처리되었습니다."
-                            ),
-                            created_at=datetime.now(timezone.utc),
-                        ))
+                        await _execute_forfeit_cancel(
+                            db, chat_room.id, meeting_obj, inviter, system_msg
+                        )
+                    else:
+                        # 채팅방이 이미 사라진 경우 — forfeit만 기록
+                        _forfeit_ticket(db, inviter, meeting_obj.id)
             else:
                 remaining = 3 - inviter_total
                 if chat_room:

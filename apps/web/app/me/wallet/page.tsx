@@ -277,9 +277,6 @@ export default function WalletPage() {
                   </div>
                 </div>
               </div>
-              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>
-                = {(matchingTickets * 10000).toLocaleString()}원
-              </div>
             </div>
 
             <div style={{ marginTop: 12, display: "flex", gap: 8 }}>

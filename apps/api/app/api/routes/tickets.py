@@ -19,8 +19,15 @@ from app.services.phone import normalize_phone_kr_to_e164, phone_hmac_hash
 
 router = APIRouter()
 
-TICKET_PRICE = 2_000   # 매칭권 1개 가격 (원)
-ALLOWED_COUNTS = {1, 3, 5, 10, 15, 20}
+# 수량별 가격 (10/15/20장은 할인 적용 — 프론트 PURCHASE_OPTIONS와 동기화)
+TICKET_PRICES: dict[int, int] = {
+    1:  2_000,
+    3:  6_000,
+    5:  10_000,
+    10: 18_000,
+    15: 26_000,
+    20: 32_000,
+}
 
 
 @router.get("/tickets/me")
@@ -58,10 +65,10 @@ def purchase_tickets(
     db: Session = Depends(get_db),
     user=Depends(require_verified),
 ):
-    if count not in ALLOWED_COUNTS:
-        raise HTTPException(400, f"구매 수량은 {sorted(ALLOWED_COUNTS)} 중 하나여야 합니다.")
+    if count not in TICKET_PRICES:
+        raise HTTPException(400, f"구매 수량은 {sorted(TICKET_PRICES)} 중 하나여야 합니다.")
 
-    total_cost = count * TICKET_PRICE
+    total_cost = TICKET_PRICES[count]
 
     db_user = db.execute(
         select(User).where(User.id == user.id).with_for_update()

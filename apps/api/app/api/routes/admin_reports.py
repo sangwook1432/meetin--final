@@ -40,10 +40,18 @@ def _apply_penalty(db: Session, user: User, report: ChatReport) -> None:
             f"(누적 경고 {count}회) 재발 시 서비스 이용이 제한됩니다."
         )
     elif count == 2:
-        user.suspended_until = _now() + timedelta(days=7)
+        # 기존 정지가 남아있으면 그 종료시점에서부터 7일 연장 (재시작이 아닌 누적)
+        now = _now()
+        prior = user.suspended_until
+        if prior and prior.tzinfo is None:
+            prior = prior.replace(tzinfo=timezone.utc)
+        base = prior if (prior and prior > now) else now
+        user.suspended_until = base + timedelta(days=7)
         until_str = user.suspended_until.strftime("%Y년 %m월 %d일 %H:%M")
+        extended = prior is not None and prior > now
         penalty_msg = (
-            f"'{reason_label}' 관련 신고가 확정되어 7일간 서비스 이용이 정지됩니다. "
+            f"'{reason_label}' 관련 신고가 확정되어 "
+            f"{'기존 정지 기간에 7일이 추가됩니다' if extended else '7일간 서비스 이용이 정지됩니다'}. "
             f"({until_str}까지 이용 제한)"
         )
     else:
